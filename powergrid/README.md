@@ -52,6 +52,7 @@ Railway reads `railway.json` and builds the Dockerfile.
 - The 2-player "Against the Trust" variant
 - Germany's nuclear phase-out rule (plant 39 stops uranium resupply)
 - In-game chat, log, and a "How to play" guide
+- Leave a game at any time (the seat auto-passes so others can continue); the host can end a game and return everyone to the lobby
 - Games saved to disk and restored after a restart
 
 ## Layout

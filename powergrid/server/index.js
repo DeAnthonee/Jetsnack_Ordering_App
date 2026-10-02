@@ -81,11 +81,17 @@ io.on('connection', (socket) => {
   socket.on('leave', handle(() => {
     if (!room) return;
     socket.leave(room.code);
+    seat.connected = false;
     rooms.leave(room, seat.id);
-    if (room.game) seat.connected = false;
     broadcast(room);
     room = null;
     seat = null;
+  }));
+
+  socket.on('endGame', handle(() => {
+    inRoom();
+    rooms.endGame(room, seat.id);
+    broadcast(room);
   }));
 
   socket.on('start', handle(() => {

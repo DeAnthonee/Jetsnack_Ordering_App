@@ -73,14 +73,34 @@ export class RoomManager {
   }
 
   leave(room, playerId) {
-    if (room.game) return; // seats are kept once the game is running
-    room.players = room.players.filter((p) => p.id !== playerId);
+    const running = room.game && room.game.phase !== 'gameover';
+    if (running) {
+      // The seat stays so the game can go on; the engine auto-passes for it.
+      room.game.resign(playerId);
+      const seat = room.players.find((p) => p.id === playerId);
+      if (seat) seat.quit = true;
+    } else {
+      room.players = room.players.filter((p) => p.id !== playerId);
+    }
     if (!room.players.length) {
       this.rooms.delete(room.code);
       this.changed();
       return;
     }
-    if (room.hostId === playerId) room.hostId = room.players[0].id;
+    if (room.hostId === playerId) {
+      const next = room.players.find((p) => !p.quit && p.connected) || room.players.find((p) => !p.quit) || room.players[0];
+      room.hostId = next.id;
+    }
+    this.changed();
+  }
+
+  // The host stops the game; everyone goes back to the lobby together.
+  endGame(room, playerId) {
+    if (room.hostId !== playerId) throw new RoomError('Only the host can end the game');
+    if (!room.game) throw new RoomError('There is no game to end');
+    room.game = null;
+    room.players = room.players.filter((p) => !p.quit);
+    room.touched = Date.now();
     this.changed();
   }
 
@@ -115,7 +135,7 @@ export class RoomManager {
       code: room.code,
       hostId: room.hostId,
       mapId: room.mapId,
-      players: room.players.map(({ id, name, connected }) => ({ id, name, connected })),
+      players: room.players.map(({ id, name, connected, quit }) => ({ id, name, connected, quit: !!quit })),
       game: room.game ? room.game.publicState() : null,
     };
   }

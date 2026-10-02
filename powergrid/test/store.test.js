@@ -52,3 +52,33 @@ test('a missing or corrupt save file starts empty', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('leaving mid-game keeps the seat; the host can end the game for everyone', () => {
+  const m = new RoomManager();
+  const { room, seat: host } = m.create('Anna');
+  const bob = m.join(room.code, 'Bob');
+  const cleo = m.join(room.code, 'Cleo');
+  m.start(room, host.id);
+
+  m.leave(room, bob.id);
+  assert.equal(room.players.length, 3, 'seat kept while the game runs');
+  assert.ok(room.players.find((p) => p.id === bob.id).quit);
+  assert.ok(room.game.player(bob.id).quit);
+  assert.throws(() => m.join(room.code, 'Dan'), /already started/);
+
+  // Host leaves: host role passes to a remaining player.
+  m.leave(room, host.id);
+  assert.equal(room.hostId, cleo.id);
+
+  // Host ends the game: back to the lobby, quit seats dropped, newcomers can join.
+  assert.throws(() => m.endGame(room, bob.id), /Only the host/);
+  m.endGame(room, cleo.id);
+  assert.equal(room.game, null);
+  assert.deepEqual(room.players.map((p) => p.name), ['Cleo']);
+  m.join(room.code, 'Dan');
+  assert.equal(room.players.length, 2);
+
+  // Leaving a lobby or a finished game frees the seat outright.
+  m.leave(room, cleo.id);
+  assert.deepEqual(room.players.map((p) => p.name), ['Dan']);
+});

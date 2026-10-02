@@ -86,7 +86,26 @@
   $('#join').onclick = () => emit('join', { name: $('#name').value, code: $('#code').value.toUpperCase() });
   $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
   $('#start').onclick = () => emit('start', {});
-  $('#leave').onclick = () => { emit('leave', {}); clearSession(); state.room = null; show('home'); };
+  function goHome() {
+    emit('leave', {});
+    clearSession();
+    state.room = null;
+    state.chat = [];
+    resetUi();
+    show('home');
+  }
+  function resetUi() {
+    state.ui = { bid: null, order: { coal: 0, oil: 0, garbage: 0, uranium: 0 }, fire: new Set(), hybridCoal: {}, quoteCity: null };
+  }
+  $('#leave').onclick = goHome;
+  $('#leave-game').onclick = () => {
+    const g = game();
+    const msg = g?.phase === 'gameover' ? 'Leave this lobby?' : 'Leave this game? The others can keep playing; your seat will pass every turn.';
+    if (confirm(msg)) goHome();
+  };
+  $('#end-game').onclick = () => {
+    if (confirm('End the game for everyone and return to the lobby?')) emit('endGame', {});
+  };
   $('#map-select').onchange = (e) => emit('settings', { mapId: e.target.value });
   $('#chat-form').onsubmit = (e) => {
     e.preventDefault();
@@ -114,9 +133,12 @@
   });
 
   socket.on('room', (room) => {
+    const wasInGame = !!state.room?.game;
     state.room = room;
-    if (!room.game) renderLobby();
-    else renderGame();
+    if (!room.game) {
+      if (wasInGame) { resetUi(); state.chat = []; toast('The host ended the game. Back in the lobby.'); }
+      renderLobby();
+    } else renderGame();
   });
 
   socket.on('connect', () => {
@@ -128,7 +150,7 @@
     show('lobby');
     $('#lobby-code').textContent = room.code;
     $('#lobby-players').innerHTML = room.players.map((p) => `
-      <li><span>${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
+      <li><span class="${p.quit ? 'quit' : ''}">${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
       <span class="${p.connected ? 'muted' : 'offline'}">${p.connected ? 'online' : 'offline'}</span></li>`).join('');
     const sel = $('#map-select');
     sel.innerHTML = Object.values(state.data.maps).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
@@ -160,6 +182,7 @@
       waiting.textContent = isMyTurn() ? 'Your move' : `Waiting for ${names.join(', ')}`;
     }
     waiting.classList.toggle('me', !!isMyTurn());
+    $('#end-game').hidden = state.room.hostId !== state.me;
 
     renderMap();
     renderAction();
@@ -260,7 +283,7 @@
       const active = g.waitingOn.includes(p.id);
       const res = RES.filter((r) => p.res[r]).map((r) => `${p.res[r]}${RES_ICON[r]}`).join(' ');
       return `<div class="player ${active ? 'active' : ''}" style="border-color:${p.color}">
-        <div class="head"><b>${esc(p.name)}${p.id === state.me ? ' (you)' : ''}</b>
+        <div class="head"><b class="${p.quit ? 'quit' : ''}">${esc(p.name)}${p.id === state.me ? ' (you)' : ''}</b>${p.quit ? ' <span class="muted">left</span>' : ''}
           ${isTrust ? `<span class="muted">${p.housesLeft} houses left</span>` : `<span>💰 ${p.money}</span>`}
           ${!isTrust && seats[p.id] && !seats[p.id].connected ? '<span class="offline">offline</span>' : ''}</div>
         <div class="stats"><span>🏠 ${p.cities.length} cities</span>${isTrust ? '' : `<span>⚡ powered ${p.lastPowered}</span>`}<span>${res || 'no resources'}</span></div>
@@ -484,8 +507,10 @@
     el.innerHTML = `<h3>Game over</h3><ol class="ranking">${g.ranking.map((id) => {
       const p = playerById(id);
       return `<li><b style="color:${p.color}">${esc(p.name)}</b> — powered ${p.lastPowered}, ${p.money} Elektro, ${p.cities.length} cities</li>`;
-    }).join('')}</ol><div class="row"><button id="back-home">Back to home</button></div>`;
-    $('#back-home').onclick = () => { emit('leave', {}); clearSession(); state.room = null; show('home'); };
+    }).join('')}</ol><div class="row">${state.room.hostId === state.me ? '<button id="again" class="primary">Back to lobby (play again)</button>' : ''}<button id="back-home">Leave</button></div>`;
+    $('#back-home').onclick = goHome;
+    const again = $('#again');
+    if (again) again.onclick = () => emit('endGame', {});
   }
 
   // Pre-select all plants the first time the Bureaucracy phase renders.

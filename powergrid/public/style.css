@@ -38,6 +38,9 @@ button:hover:not(:disabled) { border-color: var(--accent); }
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--accent); color: #1b1f24; border-color: var(--accent); font-weight: 600; }
 button.small { padding: .2rem .5rem; font-size: .85rem; }
+button.danger { border-color: var(--danger); color: var(--danger); }
+button.danger:hover:not(:disabled) { background: var(--danger); color: #fff; }
+.quit { color: var(--muted); text-decoration: line-through; }
 input, select {
   background: var(--bg);
   color: var(--text);
