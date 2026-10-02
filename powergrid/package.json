@@ -1,0 +1,20 @@
+{
+  "name": "power-grid-online",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser-based multiplayer version of the Power Grid board game (unofficial fan project)",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.4"
+  }
+}
