@@ -11,4 +11,6 @@ test('the version, changelog and package.json agree', () => {
   const versions = CHANGELOG.map((e) => e.version);
   assert.equal(new Set(versions).size, versions.length, 'no duplicate versions');
   for (const e of CHANGELOG) assert.ok(e.changes.length && e.date, `entry ${e.version} needs changes and a date`);
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('app.js?v={{VERSION}}') && html.includes('style.css?v={{VERSION}}'), 'index.html must cache-bust by version');
 });

@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import express from 'express';
@@ -14,7 +15,20 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA_FILE = process.env.DATA_FILE === 'none' ? null : (process.env.DATA_FILE || path.join(here, '..', 'data', 'rooms.json'));
 
 const app = express();
-app.use(express.static(path.join(here, '..', 'public')));
+const publicDir = path.join(here, '..', 'public');
+
+// index.html references app.js?v=<version> and style.css?v=<version>, so a
+// new version always fetches fresh files past browser and CDN caches.
+const indexHtml = readFileSync(path.join(publicDir, 'index.html'), 'utf8').replaceAll('{{VERSION}}', VERSION);
+app.get(['/', '/index.html'], (_req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.type('html').send(indexHtml);
+});
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+app.use(express.static(publicDir, { index: false, maxAge: '1y', immutable: true }));
 app.get('/api/static-data', (_req, res) => {
   res.json({
     maps: Object.fromEntries(Object.values(MAPS).map((m) => [m.id, mapView(m)])),

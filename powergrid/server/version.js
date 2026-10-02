@@ -1,9 +1,16 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.4.0';
+export const VERSION = '1.4.1';
 
 export const CHANGELOG = [
+  {
+    version: '1.4.1',
+    date: '2026-10-02',
+    changes: [
+      'Fix: after an update, browsers and Cloudflare could keep serving the old script, so new buttons did nothing. Files are now versioned so every update loads fresh.',
+    ],
+  },
   {
     version: '1.4.0',
     date: '2026-10-02',

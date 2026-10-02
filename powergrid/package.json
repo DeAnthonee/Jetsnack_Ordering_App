@@ -1,6 +1,6 @@
 {
   "name": "power-grid-online",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "Browser-based multiplayer version of the Power Grid board game (unofficial fan project)",
   "type": "module",
