@@ -68,6 +68,14 @@ public/                the browser client (vanilla JS, no build step)
 test/                  engine tests, including bot-played full games
 ```
 
+## Versioning
+
+`server/version.js` holds the version number and the changelog. Every
+change that ships bumps `VERSION`, adds a changelog entry at the top, and
+updates `version` in `package.json` to match (a test enforces this). The
+running version is shown bottom-left in the app; clicking it opens the
+changelog, so anyone can see which version a server is on.
+
 ## Tests
 
 ```sh

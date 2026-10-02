@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Power Grid Online</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ctext y=%2714%27 font-size=%2714%27%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v={{VERSION}}">
 </head>
 <body>
   <div id="toast" hidden></div>
@@ -88,6 +88,13 @@
     </div>
   </section>
 
+  <button id="version" class="version" type="button" title="What's new">v?</button>
+
+  <dialog id="changelog">
+    <div class="help-head"><h2>What's new</h2><button id="changelog-close" type="button">Close</button></div>
+    <div class="help-body" id="changelog-body"></div>
+  </dialog>
+
   <dialog id="help">
     <div class="help-head"><h2>How to play Power Grid</h2><button id="help-close" type="button">Close</button></div>
     <div class="help-body">
@@ -128,6 +135,6 @@
   </dialog>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v={{VERSION}}"></script>
 </body>
 </html>
