@@ -23,6 +23,7 @@
         <input id="code" maxlength="5" placeholder="LOBBY CODE" class="code-input">
         <button id="join">Join</button>
       </div>
+      <div class="row"><button class="help-btn" type="button">How to play</button></div>
     </div>
   </section>
 
@@ -47,7 +48,7 @@
   <section id="game" class="screen game" hidden>
     <header id="status-bar">
       <div id="status-main"></div>
-      <div id="status-waiting"></div>
+      <div class="row" style="margin:0"><div id="status-waiting"></div><button class="help-btn small" type="button">How to play</button></div>
     </header>
 
     <div class="board">
@@ -81,6 +82,45 @@
       </aside>
     </div>
   </section>
+
+  <dialog id="help">
+    <div class="help-head"><h2>How to play Power Grid</h2><button id="help-close" type="button">Close</button></div>
+    <div class="help-body">
+      <p><b>Goal:</b> when the game ends, the player who can <b>power the most cities</b> wins. Not the most cities built, the most cities <i>powered</i>: you need plants big enough and fuel to run them. Ties go to whoever has the most money.</p>
+
+      <h4>A round has five phases</h4>
+      <ol>
+        <li><b>Player order.</b> Most cities goes first; ties go to the bigger plant number. Going first is <i>bad</i> for buying resources and building, so leading has a cost.</li>
+        <li><b>Auction plants.</b> In player order, each player picks a plant from the four on the left of the market and names an opening bid (at least the plant's number; the smallest plant costs just 1). Everyone bids around until one remains. If you win, you're done buying for the round; if not, you pick again. You may pass instead, except in round 1 where everyone must buy. You can own only 3 plants; buying a 4th means scrapping one.</li>
+        <li><b>Buy resources.</b> In <i>reverse</i> order. Resources get pricier as they sell out. Each plant can store twice what it burns, in its own fuel type.</li>
+        <li><b>Build houses.</b> In <i>reverse</i> order. Your first house goes anywhere in the playing zone. After that, a new city must connect to your network: pay the cheapest path of connection costs plus the house price (10, then 15, then 20 for the 2nd and 3rd house in a city, which open up in Steps 2 and 3). You may build as many as you can afford.</li>
+        <li><b>Bureaucracy.</b> Choose which plants to run. Each plant burns its fuel and powers its number of cities; you're paid for cities powered (max is cities you own). Then the resource market restocks and the biggest plant in the market goes to the bottom of the deck.</li>
+      </ol>
+
+      <h4>Plants</h4>
+      <p>A card shows its number, what it burns (coal, oil, garbage, uranium, or <b>hybrid</b> = any mix of coal and oil) and how many cities it powers. Green and blue plants burn nothing. A plant must burn its full amount to run at all.</p>
+
+      <h4>The three Steps</h4>
+      <ul>
+        <li><b>Step 1:</b> one house per city.</li>
+        <li><b>Step 2:</b> starts once someone has 7 cities (6 with six players). Two houses per city; resources restock faster.</li>
+        <li><b>Step 3:</b> starts when the Step 3 card comes out of the deck. Three houses per city, and all six plants in the market can be bought.</li>
+      </ul>
+
+      <h4>Game end</h4>
+      <p>The game ends after a build phase in which someone reaches <b>18 cities (2 players), 17 (3–4), 15 (5) or 14 (6)</b>. One last Bureaucracy is played with no payment: whoever powers the most cities wins.</p>
+
+      <h4>2 players: the Trust</h4>
+      <p>With two players, a third "company" called the Trust gets in your way. It never bids, but after the first purchase each round it takes the biggest plant in the market for free, and it takes the fuel it needs before you buy. Its houses block city spaces: the first six are placed by you at setup, and it moves into every new city you open until it runs out of houses.</p>
+
+      <h4>Tips</h4>
+      <ul>
+        <li>Buy fuel for next round too when it's cheap; the market only restocks a fixed amount.</li>
+        <li>Don't lead the city count early. Going last in resources and building is worth a lot.</li>
+        <li>Watch the Step 2 trigger: hitting 7 cities first opens every city to a second house, including yours.</li>
+      </ul>
+    </div>
+  </dialog>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="app.js"></script>

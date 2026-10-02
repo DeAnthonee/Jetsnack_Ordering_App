@@ -9,6 +9,8 @@ import { SLOT_PRICES, PAYMENT, CITY_SLOT_COST, RESUPPLY } from './game/data.js';
 
 const PORT = process.env.PORT || 3000;
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Where lobbies are saved between restarts. Set DATA_FILE=none to disable.
+const DATA_FILE = process.env.DATA_FILE === 'none' ? null : (process.env.DATA_FILE || path.join(here, '..', 'data', 'rooms.json'));
 
 const app = express();
 app.use(express.static(path.join(here, '..', 'public')));
@@ -24,7 +26,7 @@ app.get('/api/static-data', (_req, res) => {
 
 const httpServer = createServer(app);
 const io = new Server(httpServer);
-const rooms = new RoomManager();
+const rooms = new RoomManager({ file: DATA_FILE });
 setInterval(() => rooms.sweep(), 10 * 60 * 1000).unref();
 
 const broadcast = (room) => io.to(room.code).emit('room', rooms.view(room));
@@ -119,6 +121,14 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 });
+
+// Flush pending saves when the process is told to stop (deploys, Ctrl-C).
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    rooms.store.save(rooms.rooms);
+    process.exit(0);
+  });
+}
 
 httpServer.listen(PORT, () => {
   console.log(`Power Grid server running on http://localhost:${PORT}`);
