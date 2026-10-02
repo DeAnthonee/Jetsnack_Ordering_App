@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Power Grid Online</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Ctext y=%2714%27 font-size=%2714%27%3E%E2%9A%A1%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="toast" hidden></div>
+
+  <!-- Home -->
+  <section id="home" class="screen">
+    <div class="card home-card">
+      <h1>⚡ Power Grid</h1>
+      <p class="muted">Unofficial online version of Friedemann Friese's board game. Create a lobby and share the code with 1–5 friends.</p>
+      <label>Your name <input id="name" maxlength="20" placeholder="e.g. Anna"></label>
+      <div class="row">
+        <button id="create" class="primary">Create lobby</button>
+      </div>
+      <div class="row">
+        <input id="code" maxlength="5" placeholder="LOBBY CODE" class="code-input">
+        <button id="join">Join</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lobby -->
+  <section id="lobby" class="screen" hidden>
+    <div class="card home-card">
+      <h2>Lobby <span id="lobby-code" class="code"></span></h2>
+      <p class="muted">Share this code. The game starts when the host presses Start.</p>
+      <ul id="lobby-players" class="player-list"></ul>
+      <label>Map
+        <select id="map-select"></select>
+      </label>
+      <p id="lobby-hint" class="muted"></p>
+      <div class="row">
+        <button id="start" class="primary">Start game</button>
+        <button id="leave">Leave</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Game -->
+  <section id="game" class="screen game" hidden>
+    <header id="status-bar">
+      <div id="status-main"></div>
+      <div id="status-waiting"></div>
+    </header>
+
+    <div class="board">
+      <div class="map-wrap">
+        <svg id="map" xmlns="http://www.w3.org/2000/svg"></svg>
+        <div id="map-legend"></div>
+      </div>
+
+      <aside class="side">
+        <div id="action" class="panel"></div>
+        <div class="panel">
+          <h3>Power plant market <span id="deck-size" class="muted"></span></h3>
+          <div id="market" class="plants"></div>
+        </div>
+        <div class="panel">
+          <h3>Resource market</h3>
+          <div id="res-market"></div>
+        </div>
+        <div class="panel">
+          <h3>Players</h3>
+          <div id="players"></div>
+        </div>
+        <div class="panel">
+          <h3>Log</h3>
+          <div id="log" class="log"></div>
+          <form id="chat-form" class="row">
+            <input id="chat-input" maxlength="300" placeholder="Say something…">
+            <button type="submit">Send</button>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# One-click deploy on Render: https://render.com/deploy
+services:
+  - type: web
+    name: power-grid
+    runtime: node
+    rootDir: powergrid
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/static-data
