@@ -16,10 +16,23 @@ npm install
 npm start          # http://localhost:3000
 ```
 
-`PORT=8080 npm start` changes the port. For everyone to join, the host
-needs to be reachable on the network (a LAN address, a tunnel, or a host
-such as Fly.io / Railway / Render; it's a plain Node server with no
-database).
+`PORT=8080 npm start` changes the port.
+
+## Host it online
+
+The server keeps games in memory, so it needs one always-on instance.
+The repo includes a `render.yaml` (Render), `railway.json` (Railway) and
+a `Dockerfile` (anything that runs containers).
+
+**Render (free tier):** sign in at render.com with GitHub, choose
+*New → Blueprint*, pick this repository, and Render reads `render.yaml`.
+A few minutes later you get a `https://….onrender.com` address to share.
+Free instances sleep after 15 minutes without visitors; the first visit
+after that takes about a minute to wake, and sleeping ends any game in
+progress, so finish a game in one sitting or use a paid instance.
+
+**Railway:** *New Project → Deploy from GitHub repo*, pick this repository.
+Railway reads `railway.json` and builds the Dockerfile.
 
 ## What's implemented
 
