@@ -86,9 +86,12 @@ label { display: block; margin: .5rem 0; }
 
 .board { display: grid; grid-template-columns: 1fr 380px; flex: 1; min-height: 0; }
 .map-wrap { position: relative; padding: .5rem; overflow: auto; }
-#map { width: 100%; height: 100%; max-height: calc(100vh - 60px); background: #20262d; border-radius: 10px; }
+#map { width: 100%; height: 100%; max-height: calc(100vh - 60px); background: #20262d; border-radius: 10px; cursor: grab; touch-action: none; }
+#map:active { cursor: grabbing; }
 #map-legend { position: absolute; left: 1rem; bottom: 1rem; display: flex; gap: .6rem; flex-wrap: wrap; font-size: .8rem; }
-#map-legend span { display: inline-flex; align-items: center; gap: .25rem; background: rgba(0,0,0,.5); padding: .15rem .45rem; border-radius: 6px; }
+#map-legend span { display: inline-flex; align-items: center; gap: .25rem; background: rgba(0,0,0,.6); padding: .15rem .45rem; border-radius: 6px; }
+#map-legend .hint { color: var(--muted); }
+#status-main .who { white-space: nowrap; }
 
 .side { overflow-y: auto; border-left: 1px solid var(--border); background: var(--panel); }
 .panel { padding: .75rem 1rem; border-bottom: 1px solid var(--border); }
@@ -103,6 +106,8 @@ label { display: block; margin: .5rem 0; }
 .city.inactive { opacity: .25; }
 .city.clickable { cursor: pointer; }
 .city.clickable:hover .city-circle { stroke: var(--accent); stroke-width: 3; }
+.city.mine .city-circle { stroke: #fff; stroke-width: 4; }
+.slot-letter { font-size: 10px; font-weight: 800; fill: #111; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
 .city-circle { stroke: #10141a; stroke-width: 2; }
 .city-name { font-size: 15px; fill: #fff; text-anchor: middle; pointer-events: none; font-weight: 600; paint-order: stroke; stroke: #000; stroke-width: 2.5px; }
 .slot { stroke: #10141a; stroke-width: 1; }
@@ -138,6 +143,10 @@ label { display: block; margin: .5rem 0; }
 /* Players */
 .player { padding: .45rem .5rem; margin: .3rem 0; border-radius: 8px; border-left: 5px solid; background: var(--bg); font-size: .9rem; }
 .player.active { outline: 2px solid var(--accent); }
+.player.me { background: #30363d; }
+.badge { background: var(--accent); color: #1b1f24; font-size: .65rem; font-weight: 800; padding: .05rem .4rem; border-radius: 6px; margin-left: .3rem; }
+.plants-label { color: var(--muted); font-size: .75rem; margin-top: .35rem; }
+.plant.owned { border-top: 5px solid var(--owner); }
 .player .head { display: flex; justify-content: space-between; align-items: center; }
 .player .stats { color: var(--muted); font-size: .8rem; display: flex; gap: .6rem; flex-wrap: wrap; }
 .player .plants { margin-top: .3rem; }

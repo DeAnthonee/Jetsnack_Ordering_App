@@ -104,4 +104,4 @@ export const PAYMENT = [
   10, 22, 33, 44, 54, 64, 73, 82, 90, 98, 105, 112, 118, 124, 129, 134, 138, 142, 145, 148, 150,
 ];
 
-export const PLAYER_COLORS = ['#e53935', '#1e88e5', '#43a047', '#fdd835', '#8e24aa', '#212121'];
+export const PLAYER_COLORS = ['#ff5252', '#40a9ff', '#7ed957', '#ffd43b', '#ff922b', '#e879f9'];

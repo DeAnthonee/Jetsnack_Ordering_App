@@ -100,17 +100,17 @@ const USA_CITIES = [
   ['Las Vegas', 'teal', 330, 540], ['Salt Lake City', 'teal', 430, 370], ['Phoenix', 'teal', 440, 660],
   ['Santa Fe', 'teal', 620, 570],
   ['Fargo', 'yellow', 900, 150], ['Duluth', 'yellow', 1040, 90], ['Minneapolis', 'yellow', 1020, 210],
-  ['Chicago', 'yellow', 1190, 320], ['St. Louis', 'yellow', 1130, 450], ['Cincinnati', 'yellow', 1330, 420],
+  ['Chicago', 'yellow', 1180, 310], ['St. Louis', 'yellow', 1120, 460], ['Cincinnati', 'yellow', 1340, 430],
   ['Knoxville', 'yellow', 1320, 560],
   ['Kansas City', 'red', 950, 460], ['Oklahoma City', 'red', 880, 580], ['Dallas', 'red', 920, 690],
-  ['Houston', 'red', 960, 820], ['Memphis', 'red', 1130, 600], ['Birmingham', 'red', 1240, 690],
+  ['Houston', 'red', 960, 820], ['Memphis', 'red', 1120, 600], ['Birmingham', 'red', 1230, 700],
   ['New Orleans', 'red', 1130, 810],
-  ['Atlanta', 'green', 1340, 680], ['Raleigh', 'green', 1540, 590], ['Norfolk', 'green', 1620, 500],
+  ['Atlanta', 'green', 1340, 690], ['Raleigh', 'green', 1550, 600], ['Norfolk', 'green', 1670, 550],
   ['Savannah', 'green', 1460, 740], ['Jacksonville', 'green', 1450, 830], ['Tampa', 'green', 1390, 940],
   ['Miami', 'green', 1510, 1020],
-  ['Detroit', 'orange', 1360, 300], ['Buffalo', 'orange', 1530, 240], ['Pittsburgh', 'orange', 1500, 360],
-  ['Washington', 'orange', 1590, 440], ['Philadelphia', 'orange', 1680, 400], ['New York', 'orange', 1730, 320],
-  ['Boston', 'orange', 1790, 240],
+  ['Detroit', 'orange', 1350, 290], ['Buffalo', 'orange', 1540, 210], ['Pittsburgh', 'orange', 1500, 350],
+  ['Washington', 'orange', 1590, 470], ['Philadelphia', 'orange', 1700, 410], ['New York', 'orange', 1760, 310],
+  ['Boston', 'orange', 1830, 200],
 ];
 
 const USA_EDGES = [
