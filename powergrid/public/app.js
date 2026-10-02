@@ -86,7 +86,26 @@
   $('#join').onclick = () => emit('join', { name: $('#name').value, code: $('#code').value.toUpperCase() });
   $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
   $('#start').onclick = () => emit('start', {});
-  $('#leave').onclick = () => { emit('leave', {}); clearSession(); state.room = null; show('home'); };
+  function goHome() {
+    emit('leave', {});
+    clearSession();
+    state.room = null;
+    state.chat = [];
+    resetUi();
+    show('home');
+  }
+  function resetUi() {
+    state.ui = { bid: null, order: { coal: 0, oil: 0, garbage: 0, uranium: 0 }, fire: new Set(), hybridCoal: {}, quoteCity: null };
+  }
+  $('#leave').onclick = goHome;
+  $('#leave-game').onclick = () => {
+    const g = game();
+    const msg = g?.phase === 'gameover' ? 'Leave this lobby?' : 'Leave this game? The others can keep playing; your seat will pass every turn.';
+    if (confirm(msg)) goHome();
+  };
+  $('#end-game').onclick = () => {
+    if (confirm('End the game for everyone and return to the lobby?')) emit('endGame', {});
+  };
   $('#map-select').onchange = (e) => emit('settings', { mapId: e.target.value });
   $('#chat-form').onsubmit = (e) => {
     e.preventDefault();
@@ -114,9 +133,12 @@
   });
 
   socket.on('room', (room) => {
+    const wasInGame = !!state.room?.game;
     state.room = room;
-    if (!room.game) renderLobby();
-    else renderGame();
+    if (!room.game) {
+      if (wasInGame) { resetUi(); state.chat = []; toast('The host ended the game. Back in the lobby.'); }
+      renderLobby();
+    } else renderGame();
   });
 
   socket.on('connect', () => {
@@ -128,7 +150,7 @@
     show('lobby');
     $('#lobby-code').textContent = room.code;
     $('#lobby-players').innerHTML = room.players.map((p) => `
-      <li><span>${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
+      <li><span class="${p.quit ? 'quit' : ''}">${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
       <span class="${p.connected ? 'muted' : 'offline'}">${p.connected ? 'online' : 'offline'}</span></li>`).join('');
     const sel = $('#map-select');
     sel.innerHTML = Object.values(state.data.maps).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
@@ -152,7 +174,7 @@
     };
     $('#status-main').innerHTML = `Round <b>${g.round}</b> · Step <b>${g.step}</b> · <b>${phaseNames[g.phase]}</b>` +
       (g.endTriggered ? ' · <b>final round</b>' : '') +
-      ` · Order: ${g.order.map((id) => `<span style="color:${colorOf(id)}">${esc(nameOf(id))}</span>`).join(' → ')}`;
+      ` · Order: ${g.order.map((id) => `<span class="who" style="color:${colorOf(id)}"><i class="dot" style="background:${colorOf(id)}"></i>${esc(nameOf(id))}</span>`).join(' → ')}`;
     const waiting = $('#status-waiting');
     if (g.phase === 'gameover') waiting.textContent = `${nameOf(g.winner)} wins!`;
     else {
@@ -160,6 +182,7 @@
       waiting.textContent = isMyTurn() ? 'Your move' : `Waiting for ${names.join(', ')}`;
     }
     waiting.classList.toggle('me', !!isMyTurn());
+    $('#end-game').hidden = state.room.hostId !== state.me;
 
     renderMap();
     renderAction();
@@ -167,6 +190,20 @@
     renderResMarket();
     renderPlayers();
     renderLog();
+  }
+
+  // Map viewport: null means "fit the whole map"; otherwise {x, y, w, h}.
+  let view = null;
+  let viewMapId = null;
+
+  function initial(id) {
+    const p = playerById(id);
+    return p ? (id === 'trust' ? 'T' : p.name.trim()[0].toUpperCase()) : '';
+  }
+
+  function applyView(map) {
+    const v = view || { x: 0, y: 0, w: map.width, h: map.height };
+    $('#map').setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
   }
 
   function renderMap() {
@@ -178,41 +215,101 @@
     const regionColor = Object.fromEntries(map.regions.map((r) => [r.id, r.color]));
     const me = myPlayer();
     const canClick = isMyTurn() && (g.phase === 'build' || g.phase === 'trustSetup');
+    const R = 24;
 
     let out = '';
+    let labels = '';
     for (const e of map.edges) {
       const a = byId[e.a]; const b = byId[e.b];
       const on = active.has(e.a) && active.has(e.b);
       out += `<line class="edge ${on ? '' : 'inactive'}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`;
       if (on) {
-        const mx = (a.x + b.x) / 2; const my = (a.y + b.y) / 2;
-        out += `<circle class="edge-label-bg" cx="${mx}" cy="${my}" r="11"/><text class="edge-label" x="${mx}" y="${my}">${e.cost}</text>`;
+        // Short links get their cost pushed sideways so it isn't hidden under a city.
+        let mx = (a.x + b.x) / 2; let my = (a.y + b.y) / 2;
+        const dx = b.x - a.x; const dy = b.y - a.y; const len = Math.hypot(dx, dy) || 1;
+        if (len < 2 * R + 40) { mx += (-dy / len) * 18; my += (dx / len) * 18; }
+        labels += `<circle class="edge-label-bg" cx="${mx}" cy="${my}" r="12"/><text class="edge-label" x="${mx}" y="${my}">${e.cost}</text>`;
       }
     }
+    out += labels;
     for (const c of map.cities) {
       const on = active.has(c.id);
       const slots = g.citySlots[c.id] || [null, null, null];
       const mine = me?.cities.includes(c.id);
-      out += `<g class="city ${on ? '' : 'inactive'} ${on && canClick ? 'clickable' : ''}" data-city="${c.id}">`;
-      out += `<circle class="city-circle" cx="${c.x}" cy="${c.y}" r="24" fill="${regionColor[c.region]}"${mine ? ' stroke="#fff" stroke-width="4"' : ''}/>`;
+      out += `<g class="city ${on ? '' : 'inactive'} ${on && canClick ? 'clickable' : ''} ${mine ? 'mine' : ''}" data-city="${c.id}">`;
+      out += `<circle class="city-circle" cx="${c.x}" cy="${c.y}" r="${R}" fill="${regionColor[c.region]}"/>`;
       slots.forEach((owner, i) => {
-        const x = c.x - 19 + i * 13; const y = c.y - 6;
+        const x = c.x - 21 + i * 14; const y = c.y - 7;
         const cls = owner ? '' : i < g.step ? 'empty' : 'locked';
-        out += `<rect class="slot ${cls}" x="${x}" y="${y}" width="12" height="12" rx="2"${owner ? ` fill="${colorOf(owner)}"` : ''}/>`;
+        out += `<rect class="slot ${cls}" x="${x}" y="${y}" width="13" height="13" rx="2"${owner ? ` fill="${colorOf(owner)}"` : ''}/>`;
+        if (owner) out += `<text class="slot-letter" x="${x + 6.5}" y="${y + 7}">${initial(owner)}</text>`;
       });
       out += `<text class="city-name" x="${c.x}" y="${c.y + 40}">${esc(c.name)}</text></g>`;
     }
-    svg.setAttribute('viewBox', `0 0 ${map.width} ${map.height}`);
     svg.innerHTML = out;
+    if (viewMapId !== g.mapId) { view = null; viewMapId = g.mapId; }
+    applyView(map);
 
     svg.querySelectorAll('.city.clickable').forEach((el) => {
-      el.addEventListener('click', () => onCityClick(el.dataset.city));
+      el.addEventListener('click', (ev) => { if (!dragging.moved) onCityClick(el.dataset.city); ev.stopPropagation(); });
     });
 
-    $('#map-legend').innerHTML = map.regions.filter((r) => g.regions.includes(r.id))
-      .map((r) => `<span><i class="dot" style="background:${r.color}"></i>${esc(r.name)}</span>`).join('') +
-      (g.trust ? `<span><i class="dot" style="background:${g.trust.color}"></i>The Trust</span>` : '');
+    const players = g.trust ? [...g.players, g.trust] : g.players;
+    $('#map-legend').innerHTML =
+      players.map((p) => `<span><i class="dot" style="background:${p.color}"></i>${esc(initial(p.id))} = ${esc(p.name)}</span>`).join('') +
+      map.regions.filter((r) => g.regions.includes(r.id))
+        .map((r) => `<span><i class="dot" style="background:${r.color}"></i>${esc(r.name)}</span>`).join('') +
+      '<span class="hint">scroll to zoom · drag to pan · double-click to reset</span>';
   }
+
+  // ---------- map zoom & pan ----------
+
+  const dragging = { on: false, moved: false, x: 0, y: 0 };
+  const mapEl = $('#map');
+
+  function currentView() {
+    const g = game();
+    const map = state.data.maps[g.mapId];
+    return view ? { ...view } : { x: 0, y: 0, w: map.width, h: map.height };
+  }
+
+  mapEl.addEventListener('wheel', (ev) => {
+    if (!game()) return;
+    ev.preventDefault();
+    const map = state.data.maps[game().mapId];
+    const v = currentView();
+    const rect = mapEl.getBoundingClientRect();
+    // Point under the cursor, in map units, stays fixed while zooming.
+    const scale = Math.max(v.w / rect.width, v.h / rect.height);
+    const ox = (rect.width - v.w / scale) / 2; const oy = (rect.height - v.h / scale) / 2;
+    const px = v.x + (ev.clientX - rect.left - ox) * scale;
+    const py = v.y + (ev.clientY - rect.top - oy) * scale;
+    const factor = ev.deltaY > 0 ? 1.2 : 1 / 1.2;
+    const w = Math.min(map.width, Math.max(map.width / 5, v.w * factor));
+    const h = w * (map.height / map.width);
+    view = { x: px - (px - v.x) * (w / v.w), y: py - (py - v.y) * (h / v.h), w, h };
+    if (w >= map.width) view = null;
+    applyView(map);
+  }, { passive: false });
+
+  mapEl.addEventListener('pointerdown', (ev) => {
+    dragging.on = true; dragging.moved = false; dragging.x = ev.clientX; dragging.y = ev.clientY;
+    mapEl.setPointerCapture(ev.pointerId);
+  });
+  mapEl.addEventListener('pointermove', (ev) => {
+    if (!dragging.on || !game()) return;
+    const dx = ev.clientX - dragging.x; const dy = ev.clientY - dragging.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) dragging.moved = true;
+    if (!dragging.moved || !view) return;
+    const map = state.data.maps[game().mapId];
+    const rect = mapEl.getBoundingClientRect();
+    const scale = Math.max(view.w / rect.width, view.h / rect.height);
+    view.x -= dx * scale; view.y -= dy * scale;
+    dragging.x = ev.clientX; dragging.y = ev.clientY;
+    applyView(map);
+  });
+  mapEl.addEventListener('pointerup', () => { dragging.on = false; setTimeout(() => { dragging.moved = false; }, 0); });
+  mapEl.addEventListener('dblclick', () => { if (game()) { view = null; applyView(state.data.maps[game().mapId]); } });
 
   function onCityClick(cityId) {
     const g = game();
@@ -254,17 +351,23 @@
   function renderPlayers() {
     const g = game();
     const seats = Object.fromEntries(state.room.players.map((p) => [p.id, p]));
-    const list = g.trust ? [...g.players, g.trust] : g.players;
+    const others = g.players.filter((p) => p.id !== state.me);
+    const me = myPlayer();
+    const list = [...(me ? [me] : []), ...others, ...(g.trust ? [g.trust] : [])];
     $('#players').innerHTML = list.map((p) => {
       const isTrust = p.id === 'trust';
+      const isMe = p.id === state.me;
       const active = g.waitingOn.includes(p.id);
       const res = RES.filter((r) => p.res[r]).map((r) => `${p.res[r]}${RES_ICON[r]}`).join(' ');
-      return `<div class="player ${active ? 'active' : ''}" style="border-color:${p.color}">
-        <div class="head"><b>${esc(p.name)}${p.id === state.me ? ' (you)' : ''}</b>
+      const plants = p.plants.map((pl) => plantCard(pl, 'owned', '').replace('<div class="plant', `<div style="--owner:${p.color}" class="plant`)).join('');
+      return `<div class="player ${active ? 'active' : ''} ${isMe ? 'me' : ''}" style="border-color:${p.color}">
+        <div class="head"><b class="${p.quit ? 'quit' : ''}"><i class="dot" style="background:${p.color}"></i>${esc(p.name)}</b>
+          ${isMe ? '<span class="badge">YOU</span>' : ''}${p.quit ? ' <span class="muted">left</span>' : ''}
           ${isTrust ? `<span class="muted">${p.housesLeft} houses left</span>` : `<span>💰 ${p.money}</span>`}
           ${!isTrust && seats[p.id] && !seats[p.id].connected ? '<span class="offline">offline</span>' : ''}</div>
         <div class="stats"><span>🏠 ${p.cities.length} cities</span>${isTrust ? '' : `<span>⚡ powered ${p.lastPowered}</span>`}<span>${res || 'no resources'}</span></div>
-        <div class="plants">${p.plants.map((pl) => plantCard(pl)).join('')}</div>
+        <div class="plants-label">${isMe ? 'Your plants' : 'Plants'}${p.plants.length ? '' : ': none'}</div>
+        <div class="plants">${plants}</div>
       </div>`;
     }).join('');
   }
@@ -484,8 +587,10 @@
     el.innerHTML = `<h3>Game over</h3><ol class="ranking">${g.ranking.map((id) => {
       const p = playerById(id);
       return `<li><b style="color:${p.color}">${esc(p.name)}</b> — powered ${p.lastPowered}, ${p.money} Elektro, ${p.cities.length} cities</li>`;
-    }).join('')}</ol><div class="row"><button id="back-home">Back to home</button></div>`;
-    $('#back-home').onclick = () => { emit('leave', {}); clearSession(); state.room = null; show('home'); };
+    }).join('')}</ol><div class="row">${state.room.hostId === state.me ? '<button id="again" class="primary">Back to lobby (play again)</button>' : ''}<button id="back-home">Leave</button></div>`;
+    $('#back-home').onclick = goHome;
+    const again = $('#again');
+    if (again) again.onclick = () => emit('endGame', {});
   }
 
   // Pre-select all plants the first time the Bureaucracy phase renders.

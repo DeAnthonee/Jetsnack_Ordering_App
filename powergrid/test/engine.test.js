@@ -188,6 +188,33 @@ test('on the Germany map, buying plant 39 stops uranium resupply', () => {
   assert.equal(g.resMarket.uranium, before);
 });
 
+test('a player who leaves auto-passes and the game goes on', () => {
+  const g = gameWithMarket(3, [3, 4, 5, 6, 7, 8, 9, 10]);
+  g.deck.unshift(plant(13), plant(14), plant(15));
+  const [a, b, c] = g.order;
+  g.resign(b);
+  assert.ok(g.player(b).quit);
+  assert.throws(() => g.apply(b, { type: 'passBid' }), /left this game/);
+
+  // a buys; b should be skipped in the bidding and in choosing.
+  g.apply(a, { type: 'startAuction', plant: 3, bid: 1 });
+  assert.equal(g.auction.current?.turn, c, 'b was skipped as a bidder');
+  g.apply(c, { type: 'passBid' });
+  g.apply(c, { type: 'startAuction', plant: 4, bid: 4 });
+  assert.equal(g.phase, 'resources', 'b auto-passed its own pick despite round 1');
+  for (let i = 0; i < 2; i++) g.apply(g.currentTurn(), { type: 'buyResources', order: {} });
+  assert.equal(g.phase, 'build');
+  assert.notEqual(g.currentTurn(), b, 'b never holds the turn');
+  for (let i = 0; i < 2; i++) g.apply(g.currentTurn(), { type: 'endBuild' });
+  assert.equal(g.phase, 'bureaucracy');
+  assert.ok(b in g.powerChoices, 'b auto-powered');
+
+  // One more leaving ends the game for the last player standing.
+  g.resign(c);
+  assert.equal(g.phase, 'gameover');
+  assert.equal(g.winner, a);
+});
+
 // ---------- full-game simulation with simple bots ----------
 
 function chooseAction(g, id) {

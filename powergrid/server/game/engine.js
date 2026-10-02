@@ -73,6 +73,7 @@ export class Game {
       cities: [],
       lastPowered: 0,
       lastIncome: 0,
+      quit: false,
     }));
     this.trust = count === 2
       ? { id: TRUST.id, name: TRUST.name, color: TRUST.color, plants: [], res: emptyRes(), cities: [], housesLeft: TRUST.houses }
@@ -411,7 +412,7 @@ export class Game {
     const a = this.auction;
     check(this.phase === 'auction' && !a.current && !a.pendingDiscard, 'You cannot pass now');
     check(this.auctionChooser() === playerId, 'It is not your turn');
-    check(this.round > 1, 'Everyone must buy a plant in the first round');
+    check(this.round > 1 || this.player(playerId).quit, 'Everyone must buy a plant in the first round');
     a.queue.shift();
     this.addLog(`${this.player(playerId).name} passes on buying a plant.`);
     this.afterAuctionStep();
@@ -707,14 +708,59 @@ export class Game {
     }
   }
 
-  finishGame() {
+  finishGame(reason = null) {
     const ranked = [...this.players].sort(
-      (a, b) => b.lastPowered - a.lastPowered || b.money - a.money || b.cities.length - a.cities.length,
+      (a, b) => a.quit - b.quit || b.lastPowered - a.lastPowered || b.money - a.money || b.cities.length - a.cities.length,
     );
     this.phase = 'gameover';
     this.winner = ranked[0].id;
     this.ranking = ranked.map((p) => p.id);
-    this.addLog(`${ranked[0].name} wins by powering ${ranked[0].lastPowered} cities!`);
+    this.addLog(reason || `${ranked[0].name} wins by powering ${ranked[0].lastPowered} cities!`);
+  }
+
+  // ---------- quitting ----------
+
+  // A player who leaves mid-game stays in the game as a seat that always
+  // passes, so the others can keep playing.
+  resign(playerId) {
+    const p = this.player(playerId);
+    if (p.quit || this.phase === 'gameover') return;
+    p.quit = true;
+    this.addLog(`${p.name} has left the game.`);
+    const left = this.players.filter((x) => !x.quit);
+    if (left.length <= 1) {
+      const last = left[0];
+      return this.finishGame(last ? `${last.name} wins: everyone else has left.` : 'Everyone has left the game.');
+    }
+    this.autoplay();
+  }
+
+  // Take the default action for every quit player the game is waiting on.
+  autoplay() {
+    for (let guard = 0; guard < 500 && this.phase !== 'gameover'; guard++) {
+      const id = this.waitingOn().find((x) => this.player(x).quit);
+      if (!id) return;
+      const p = this.player(id);
+      switch (this.phase) {
+        case 'trustSetup': {
+          const city = [...this.activeCities].find((c) => {
+            if (this.citySlots[c][0]) return false;
+            return !this.trust.cities.length || this.neighbors[c].some((n) => this.trust.cities.includes(n.city));
+          });
+          this.placeTrust(id, city);
+          break;
+        }
+        case 'auction':
+          if (this.auction.pendingDiscard === id) this.discardPlant(id, p.plants.find((x) => x.n !== this.auction.justBought).n);
+          else if (this.auction.current) this.passBid(id);
+          else this.passAuction(id);
+          break;
+        case 'resources': this.buyResources(id, {}); break;
+        case 'build': this.endBuild(id); break;
+        case 'bureaucracy': this.power(id, [], {}); break;
+        default: return;
+      }
+    }
   }
 
   // ---------- dispatch & serialisation ----------
@@ -722,6 +768,15 @@ export class Game {
   apply(playerId, action) {
     check(this.phase !== 'gameover', 'The game is over');
     check(action && typeof action.type === 'string', 'Invalid action');
+    check(!this.player(playerId).quit, 'You have left this game');
+    try {
+      this.dispatch(playerId, action);
+    } finally {
+      this.autoplay();
+    }
+  }
+
+  dispatch(playerId, action) {
     switch (action.type) {
       case 'placeTrust': return this.placeTrust(playerId, action.city);
       case 'startAuction': return this.startAuction(playerId, action.plant, action.bid);
