@@ -173,6 +173,21 @@ test('drawing Step 3 during Bureaucracy starts Step 3 next round', () => {
   assert.equal(g.phase, 'auction');
 });
 
+test('on the Germany map, buying plant 39 stops uranium resupply', () => {
+  const g = gameWithMarket(3, [3, 4, 5, 6, 7, 8, 9, 39], { mapId: 'germany' });
+  g.step = 3; // make 39 buyable
+  g.market = [4, 5, 6, 7, 8, 39].map(plant);
+  g.startAuctionPhase();
+  const [a, b, c] = g.order;
+  g.apply(a, { type: 'startAuction', plant: 39, bid: 39 });
+  g.apply(b, { type: 'passBid' });
+  g.apply(c, { type: 'passBid' });
+  assert.ok(g.uraniumPhaseOut);
+  const before = g.resMarket.uranium;
+  g.resupply();
+  assert.equal(g.resMarket.uranium, before);
+});
+
 // ---------- full-game simulation with simple bots ----------
 
 function chooseAction(g, id) {

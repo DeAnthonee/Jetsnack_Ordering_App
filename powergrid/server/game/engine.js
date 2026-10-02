@@ -96,6 +96,7 @@ export class Game {
     this.discount = null;
     this.winner = null;
     this.endTriggered = false;
+    this.uraniumPhaseOut = false;
     this.setupDeck();
     this.resMarket = { ...RES_START };
 
@@ -354,6 +355,11 @@ export class Game {
     this.auction.current = null;
     this.auction.queue = this.auction.queue.filter((id) => id !== winner.id);
     this.addLog(`${winner.name} buys plant ${plant.n} for ${c.bid}.`);
+    // Rulebook p. 7, Germany map: buying plant 39 ends uranium resupply.
+    if (this.map.id === 'germany' && plant.n === 39 && !this.uraniumPhaseOut) {
+      this.uraniumPhaseOut = true;
+      this.addLog('Nuclear phase-out: uranium will no longer be resupplied.');
+    }
     this.drawIntoMarket();
 
     if (winner.plants.length > this.rules.maxPlants) {
@@ -660,6 +666,7 @@ export class Game {
     const table = RESUPPLY[this.players.length];
     const holders = this.trust ? [...this.players, this.trust] : this.players;
     for (const r of RES_TYPES) {
+      if (r === 'uranium' && this.uraniumPhaseOut) continue;
       const held = holders.reduce((s, p) => s + p.res[r], 0);
       const bank = RES_TOTAL[r] - held - this.resMarket[r];
       const room = SLOT_PRICES[r].length - this.resMarket[r];
@@ -745,6 +752,7 @@ export class Game {
       discount: this.phase === 'auction' ? this.discount : null,
       deckSize: this.deck.length,
       step3Pending: this.step3Pending,
+      uraniumPhaseOut: this.uraniumPhaseOut,
       resMarket: { ...this.resMarket },
       citySlots: this.citySlots,
       trustSetupQueue: this.phase === 'trustSetup' ? this.trustSetupQueue : [],
