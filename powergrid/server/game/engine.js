@@ -1,11 +1,11 @@
-// Authoritative Power Grid game engine. The server owns one Game per room;
-// clients send actions and receive publicState() snapshots.
+// Authoritative Power Grid (Recharged) game engine. The server owns one Game
+// per room; clients send actions and receive publicState() snapshots.
 
 import {
-  PLANTS, STEP3_CARD, STARTING_MONEY, PLAYER_RULES, SLOT_PRICES, RES_TOTAL,
-  RES_START, RESUPPLY, CITY_SLOT_COST, PAYMENT, PLAYER_COLORS, RES_TYPES,
+  PLANTS, STEP3_CARD, STARTING_MONEY, PLAYER_RULES, PLUG_MAX, TRUST, SLOT_PRICES,
+  RES_TOTAL, RES_START, RESUPPLY, CITY_SLOT_COST, PAYMENT, PLAYER_COLORS, RES_TYPES,
 } from './data.js';
-import { CITIES, EDGES, REGIONS, regionAdjacency, cityById } from './map.js';
+import { getMap, regionAdjacency, DEFAULT_MAP } from './map.js';
 
 export class GameError extends Error {}
 
@@ -21,6 +21,8 @@ function mulberry32(seed) {
 }
 
 const byNumber = (a, b) => a.n - b.n;
+const isPlant = (p) => p.type !== 'step3';
+const emptyRes = () => ({ coal: 0, oil: 0, garbage: 0, uranium: 0 });
 const check = (cond, msg) => {
   if (!cond) throw new GameError(msg);
 };
@@ -54,11 +56,17 @@ export function canStore(plants, res) {
 }
 
 export class Game {
-  constructor(players, { seed = Date.now(), regions = null } = {}) {
+  constructor(players, { seed = Date.now(), mapId = DEFAULT_MAP, regions = null } = {}) {
     const count = players.length;
     check(count >= 2 && count <= 6, 'Power Grid needs 2-6 players');
     this.rand = mulberry32(seed);
     this.rules = PLAYER_RULES[count];
+    this.map = getMap(mapId);
+    this.neighbors = {};
+    for (const e of this.map.edges) {
+      (this.neighbors[e.a] ||= []).push({ city: e.b, cost: e.cost });
+      (this.neighbors[e.b] ||= []).push({ city: e.a, cost: e.cost });
+    }
 
     this.players = players.map((p, i) => ({
       id: p.id,
@@ -66,27 +74,45 @@ export class Game {
       color: PLAYER_COLORS[i],
       money: STARTING_MONEY,
       plants: [],
-      res: { coal: 0, oil: 0, garbage: 0, uranium: 0 },
+      res: emptyRes(),
       cities: [],
       lastPowered: 0,
       lastIncome: 0,
     }));
+    this.trust = count === 2
+      ? { id: TRUST.id, name: TRUST.name, color: TRUST.color, plants: [], res: emptyRes(), cities: [], housesLeft: TRUST.houses }
+      : null;
 
     this.regions = regions || this.pickRegions(this.rules.regions);
-    this.activeCities = new Set(CITIES.filter((c) => this.regions.includes(c.region)).map((c) => c.id));
-    this.cityOwners = Object.fromEntries([...this.activeCities].map((id) => [id, []]));
+    this.activeCities = new Set(this.map.cities.filter((c) => this.regions.includes(c.region)).map((c) => c.id));
+    // Each city has three spaces (10 / 15 / 20); holds a player id, 'trust' or null.
+    this.citySlots = Object.fromEntries([...this.activeCities].map((id) => [id, [null, null, null]]));
 
+    this.log = [];
+    this.round = 1;
+    this.step = 1;
+    this.step3Pending = false;
+    this.step3NextRound = false;
+    this.discount = null;
+    this.winner = null;
+    this.endTriggered = false;
     this.setupDeck();
     this.resMarket = { ...RES_START };
 
-    this.round = 1;
-    this.step = 1;
-    this.order = this.shuffle(this.players.map((p) => p.id));
-    this.log = [];
-    this.winner = null;
-    this.endTriggered = false;
-    this.addLog(`Game started with ${count} players. Regions: ${this.regions.map((r) => REGIONS.find((x) => x.id === r).name).join(', ')}.`);
-    this.startAuctionPhase();
+    const humans = this.shuffle(this.players.map((p) => p.id));
+    this.order = this.trust ? [humans[0], TRUST.id, humans[1]] : humans;
+
+    const zone = this.regions.map((r) => this.map.regions.find((x) => x.id === r).name).join(', ');
+    this.addLog(`Game started on the ${this.map.name} map with ${count} players. Playing zone: ${zone}.`);
+
+    if (this.trust) {
+      const [a, , b] = this.order;
+      this.phase = 'trustSetup';
+      this.trustSetupQueue = [a, b, b, a, a, b];
+      this.addLog(`${this.player(a).name} places the Trust's first house; then players alternate placing its 6 starting houses.`);
+    } else {
+      this.startAuctionPhase();
+    }
   }
 
   // ---------- setup helpers ----------
@@ -101,8 +127,8 @@ export class Game {
   }
 
   pickRegions(n) {
-    const adj = regionAdjacency();
-    const ids = REGIONS.map((r) => r.id);
+    const adj = regionAdjacency(this.map);
+    const ids = this.map.regions.map((r) => r.id);
     const chosen = [ids[Math.floor(this.rand() * ids.length)]];
     while (chosen.length < n) {
       const frontier = [...new Set(chosen.flatMap((r) => [...adj[r]]))].filter((r) => !chosen.includes(r));
@@ -111,13 +137,18 @@ export class Game {
     return chosen;
   }
 
+  // Rulebook p. 3: 8 random plug cards (03-15) form the market; one more plug
+  // card is set aside to go on top of the stack; random plug and socket cards
+  // are removed by player count; Step 3 goes to the bottom.
   setupDeck() {
     const plants = PLANTS.map((p) => ({ ...p }));
-    this.market = plants.filter((p) => p.n <= 10);
-    let rest = plants.filter((p) => p.n > 10 && p.n !== 13);
-    const p13 = plants.find((p) => p.n === 13);
-    rest = this.shuffle(rest).slice(this.rules.removeCards);
-    this.deck = [p13, ...rest, { ...STEP3_CARD }];
+    const plugs = this.shuffle(plants.filter((p) => p.n <= PLUG_MAX));
+    const sockets = this.shuffle(plants.filter((p) => p.n > PLUG_MAX));
+    this.market = plugs.splice(0, 8).sort(byNumber);
+    const top = plugs.shift();
+    plugs.splice(0, this.rules.removePlug);
+    sockets.splice(0, this.rules.removeSocket);
+    this.deck = [top, ...this.shuffle([...plugs, ...sockets]), { ...STEP3_CARD }];
   }
 
   addLog(msg) {
@@ -131,8 +162,34 @@ export class Game {
     return p;
   }
 
+  humanOrder() {
+    return this.order.filter((id) => id !== TRUST.id);
+  }
+
   maxCities() {
     return Math.max(0, ...this.players.map((p) => p.cities.length));
+  }
+
+  cityName(id) {
+    return this.map.cityById[id].name;
+  }
+
+  // ---------- 2-player Trust setup ----------
+
+  placeTrust(playerId, cityId) {
+    check(this.phase === 'trustSetup' && this.trustSetupQueue[0] === playerId, 'It is not your turn to place a Trust house');
+    check(this.activeCities.has(cityId), 'That city is not in the playing zone');
+    check(!this.citySlots[cityId][0], 'The Trust already has a house there');
+    if (this.trust.cities.length) {
+      const adjacent = this.neighbors[cityId].some((n) => this.trust.cities.includes(n.city));
+      check(adjacent, 'Trust houses must be placed next to a city that already has one');
+    }
+    this.citySlots[cityId][0] = TRUST.id;
+    this.trust.cities.push(cityId);
+    this.trust.housesLeft--;
+    this.trustSetupQueue.shift();
+    this.addLog(`${this.player(playerId).name} places a Trust house in ${this.cityName(cityId)}.`);
+    if (!this.trustSetupQueue.length) this.startAuctionPhase();
   }
 
   // ---------- power plant market ----------
@@ -142,29 +199,32 @@ export class Game {
   }
 
   actualMarket() {
-    return this.step === 3 ? this.market : this.market.slice(0, 4);
+    return (this.step === 3 ? this.market : this.market.slice(0, 4)).filter(isPlant);
   }
 
-  // Draw a card into the market, following the "too small" and Step 3 rules.
+  // Draw one card into the market, applying the discount-token and Step 3 rules.
   drawIntoMarket() {
     while (this.deck.length) {
       const card = this.deck.shift();
       if (card.type === 'step3') {
+        this.deck = this.shuffle(this.deck);
         if (this.phase === 'bureaucracy') {
+          // Rulebook p. 11 (2): remove the card and the lowest plant, no replacement.
           this.sortMarket();
-          this.market.shift(); // remove lowest plant, no replacement
-          this.beginStep3();
+          this.market.shift();
+          this.step3NextRound = true;
+          this.addLog('The Step 3 card was drawn. Step 3 begins next round.');
         } else {
           this.market.push(card);
           this.step3Pending = true;
-          this.deck = this.shuffle(this.deck);
           this.addLog('The Step 3 card was drawn. Step 3 begins after this phase.');
         }
         this.sortMarket();
         return;
       }
-      if (card.n <= this.maxCities()) {
-        this.addLog(`Plant ${card.n} is too small for the leading network and is removed.`);
+      if (this.phase === 'auction' && this.discount !== null && card.n < this.discount) {
+        this.addLog(`Plant ${card.n} is smaller than the discounted plant; it is removed along with the discount token.`);
+        this.discount = null;
         continue;
       }
       this.market.push(card);
@@ -177,48 +237,41 @@ export class Game {
   beginStep3() {
     this.step = 3;
     this.step3Pending = false;
-    this.market = this.market.filter((p) => p.type !== 'step3');
+    this.step3NextRound = false;
+    this.market = this.market.filter(isPlant);
     this.deck = this.shuffle(this.deck);
-    this.addLog('Step 3 has begun: every plant in the market can now be bought, and 3 houses fit in each city.');
+    this.addLog('Step 3 has begun: all plants in the market can be bought, and 3 houses fit in each city.');
   }
 
   resolvePendingStep3() {
     if (!this.step3Pending) return;
-    this.market = this.market.filter((p) => p.type !== 'step3');
+    this.market = this.market.filter(isPlant);
     this.sortMarket();
-    this.market.shift();
+    const lowest = this.market.shift();
+    if (lowest) this.addLog(`Plant ${lowest.n} is removed for Step 3.`);
     this.beginStep3();
   }
 
-  removeLowestAndReplace() {
-    this.sortMarket();
-    const removed = this.market.find((p) => p.type !== 'step3');
-    if (!removed) return;
-    this.market = this.market.filter((p) => p !== removed);
-    this.addLog(`Plant ${removed.n} is removed from the market.`);
+  removePlant(plant, reason) {
+    this.market = this.market.filter((p) => p !== plant);
+    this.addLog(`Plant ${plant.n} ${reason}.`);
     this.drawIntoMarket();
   }
 
-  pruneSmallPlants() {
-    const max = this.maxCities();
-    let removed = this.market.filter((p) => p.type !== 'step3' && p.n <= max);
-    while (removed.length) {
-      for (const p of removed) {
-        this.market = this.market.filter((x) => x !== p);
-        this.addLog(`Plant ${p.n} is now smaller than the largest network and is removed.`);
-        this.drawIntoMarket();
-      }
-      removed = this.market.filter((p) => p.type !== 'step3' && p.n <= max);
-    }
+  removeLowestAndReplace(reason = 'is removed from the market') {
+    this.sortMarket();
+    const lowest = this.market.find(isPlant);
+    if (lowest) this.removePlant(lowest, reason);
   }
 
   // ---------- phase 1: turn order ----------
 
   determineOrder() {
     const highest = (p) => Math.max(0, ...p.plants.map((x) => x.n));
-    this.order = [...this.players]
+    const humans = [...this.players]
       .sort((a, b) => b.cities.length - a.cities.length || highest(b) - highest(a))
       .map((p) => p.id);
+    this.order = this.trust ? [humans[0], TRUST.id, humans[1]] : humans;
   }
 
   // ---------- phase 2: auction ----------
@@ -226,24 +279,32 @@ export class Game {
   startAuctionPhase() {
     this.phase = 'auction';
     this.auction = {
-      queue: [...this.order], // players who may still start an auction
-      boughtCount: 0,
+      queue: this.humanOrder(), // players who may still start an auction
       current: null,
       pendingDiscard: null,
+      justBought: null,
+      trustTook: !this.trust,
     };
+    const smallest = this.actualMarket()[0];
+    this.discount = smallest ? smallest.n : null;
   }
 
   auctionChooser() {
     return this.auction.queue[0] ?? null;
   }
 
+  minimumBid(plant) {
+    return plant.n === this.discount ? 1 : plant.n;
+  }
+
   startAuction(playerId, plantN, bid) {
     const a = this.auction;
-    check(!a.current && !a.pendingDiscard, 'An auction is already running');
+    check(this.phase === 'auction' && !a.current && !a.pendingDiscard, 'You cannot start an auction now');
     check(this.auctionChooser() === playerId, 'It is not your turn to choose a plant');
-    const plant = this.actualMarket().find((p) => p.n === plantN && p.type !== 'step3');
+    const plant = this.actualMarket().find((p) => p.n === plantN);
     check(plant, 'That plant is not available to buy');
-    check(Number.isInteger(bid) && bid >= plant.n, `Opening bid must be at least ${plant.n}`);
+    const min = this.minimumBid(plant);
+    check(Number.isInteger(bid) && bid >= min, `Opening bid must be at least ${min}`);
     check(bid <= this.player(playerId).money, 'You cannot afford that bid');
 
     const bidders = a.queue.filter((id) => id === playerId || this.player(id).money > bid);
@@ -255,15 +316,14 @@ export class Game {
   advanceBidTurn() {
     const c = this.auction.current;
     if (c.bidders.length === 1) return this.finishAuction();
-    const from = c.turn ?? c.high;
-    const idx = c.bidders.indexOf(from);
+    const idx = c.bidders.indexOf(c.turn ?? c.high);
     c.turn = c.bidders[(idx + 1) % c.bidders.length];
     if (c.turn === c.high) return this.finishAuction();
   }
 
   bid(playerId, amount) {
-    const c = this.auction.current;
-    check(c && c.turn === playerId, 'It is not your turn to bid');
+    const c = this.auction?.current;
+    check(this.phase === 'auction' && c && c.turn === playerId, 'It is not your turn to bid');
     check(Number.isInteger(amount) && amount > c.bid, `Bid must be more than ${c.bid}`);
     check(amount <= this.player(playerId).money, 'You cannot afford that bid');
     c.bid = amount;
@@ -273,8 +333,8 @@ export class Game {
   }
 
   passBid(playerId) {
-    const c = this.auction.current;
-    check(c && c.turn === playerId, 'It is not your turn to bid');
+    const c = this.auction?.current;
+    check(this.phase === 'auction' && c && c.turn === playerId, 'It is not your turn to bid');
     const idx = c.bidders.indexOf(playerId);
     c.bidders.splice(idx, 1);
     c.turn = c.bidders[(idx - 1 + c.bidders.length) % c.bidders.length];
@@ -288,10 +348,10 @@ export class Game {
     const plant = this.market.find((p) => p.n === c.plant);
     winner.money -= c.bid;
     this.market = this.market.filter((p) => p !== plant);
+    if (plant.n === this.discount) this.discount = null;
     winner.plants.push(plant);
     winner.plants.sort(byNumber);
     this.auction.current = null;
-    this.auction.boughtCount++;
     this.auction.queue = this.auction.queue.filter((id) => id !== winner.id);
     this.addLog(`${winner.name} buys plant ${plant.n} for ${c.bid}.`);
     this.drawIntoMarket();
@@ -305,7 +365,7 @@ export class Game {
   }
 
   discardPlant(playerId, plantN) {
-    check(this.auction?.pendingDiscard === playerId, 'You do not need to discard a plant');
+    check(this.phase === 'auction' && this.auction.pendingDiscard === playerId, 'You do not need to scrap a plant');
     const p = this.player(playerId);
     const plant = p.plants.find((x) => x.n === plantN);
     check(plant, 'You do not own that plant');
@@ -313,13 +373,14 @@ export class Game {
     p.plants = p.plants.filter((x) => x !== plant);
     this.trimResources(p);
     this.auction.pendingDiscard = null;
+    this.auction.justBought = null;
     this.addLog(`${p.name} scraps plant ${plantN}.`);
     this.afterAuctionStep();
   }
 
   passAuction(playerId) {
     const a = this.auction;
-    check(!a.current && !a.pendingDiscard, 'An auction is running');
+    check(this.phase === 'auction' && !a.current && !a.pendingDiscard, 'You cannot pass now');
     check(this.auctionChooser() === playerId, 'It is not your turn');
     check(this.round > 1, 'Everyone must buy a plant in the first round');
     a.queue.shift();
@@ -328,14 +389,43 @@ export class Game {
   }
 
   afterAuctionStep() {
+    if (!this.auction.trustTook) this.trustTakePlant();
     if (this.auction.queue.length) return;
-    if (this.auction.boughtCount === 0) this.removeLowestAndReplace();
+
+    if (this.discount !== null) {
+      const plant = this.market.find((p) => p.n === this.discount);
+      this.discount = null;
+      if (plant) this.removePlant(plant, 'had the discount token and nobody bought it, so it is removed');
+    }
     this.resolvePendingStep3();
     if (this.round === 1) this.determineOrder();
     this.startTurnPhase('resources');
   }
 
-  // Excess resources are returned to the bank when storage shrinks.
+  // Rulebook p. 9: after the first purchase (or the first player opting out),
+  // the Trust takes the biggest plant in the current market for free.
+  trustTakePlant() {
+    this.auction.trustTook = true;
+    const t = this.trust;
+    const biggest = this.actualMarket().at(-1);
+    if (!biggest) return;
+    if (t.plants.length >= 3) {
+      if (biggest.n <= t.plants[0].n) {
+        this.addLog(`The Trust does not take a plant (plant ${biggest.n} is not bigger than its smallest).`);
+        return;
+      }
+      const scrapped = t.plants.shift();
+      this.addLog(`The Trust scraps plant ${scrapped.n}.`);
+    }
+    if (biggest.n === this.discount) this.discount = null;
+    this.market = this.market.filter((p) => p !== biggest);
+    t.plants.push(biggest);
+    t.plants.sort(byNumber);
+    this.addLog(`The Trust takes plant ${biggest.n}.`);
+    this.drawIntoMarket();
+  }
+
+  // Excess resources go back to the supply when storage shrinks.
   trimResources(p) {
     const c = storageCaps(p.plants);
     p.res.garbage = Math.min(p.res.garbage, c.garbage);
@@ -350,16 +440,51 @@ export class Game {
     }
   }
 
-  // ---------- phases 3 & 4: reverse turn order ----------
+  // ---------- phases 3 & 4: reverse player order ----------
 
   startTurnPhase(phase) {
     this.phase = phase;
-    this.turnQueue = [...this.order].reverse();
-    if (phase === 'build') this.builtThisTurn = [];
+    const order = phase === 'build' ? this.humanOrder() : this.order;
+    this.turnQueue = [...order].reverse();
+    this.builtThisTurn = [];
+    this.runAutomaticTurns();
+  }
+
+  runAutomaticTurns() {
+    while (this.turnQueue[0] === TRUST.id) {
+      this.trustTakeResources();
+      this.turnQueue.shift();
+    }
+    if (!this.turnQueue.length) {
+      if (this.phase === 'resources') this.startTurnPhase('build');
+      else if (this.phase === 'build') this.startBureaucracy();
+    }
   }
 
   currentTurn() {
     return this.turnQueue?.[0] ?? null;
+  }
+
+  // The Trust takes what its plants need for one firing, free of charge.
+  trustTakeResources() {
+    const t = this.trust;
+    const taken = emptyRes();
+    const take = (r) => {
+      if (this.resMarket[r] <= 0) return false;
+      this.resMarket[r]--;
+      t.res[r]++;
+      taken[r]++;
+      return true;
+    };
+    for (const plant of t.plants) {
+      if (plant.type === 'eco') continue;
+      for (let i = 0; i < plant.input; i++) {
+        if (plant.type !== 'hybrid') take(plant.type);
+        else if (!take(i % 2 === 0 ? 'coal' : 'oil')) take(i % 2 === 0 ? 'oil' : 'coal');
+      }
+    }
+    const list = RES_TYPES.filter((r) => taken[r]).map((r) => `${taken[r]} ${r}`);
+    this.addLog(list.length ? `The Trust takes ${list.join(', ')}.` : 'The Trust takes no resources.');
   }
 
   quoteResources(order) {
@@ -388,11 +513,11 @@ export class Game {
     const bought = RES_TYPES.filter((r) => order[r]).map((r) => `${order[r]} ${r}`);
     this.addLog(bought.length ? `${p.name} buys ${bought.join(', ')} for ${total}.` : `${p.name} buys no resources.`);
     this.turnQueue.shift();
-    if (!this.turnQueue.length) this.startTurnPhase('build');
+    this.runAutomaticTurns();
   }
 
   // Cheapest connection from the player's network to `target`, travelling
-  // only through cities in play.
+  // only through cities in the playing zone.
   connectionCost(p, target) {
     if (!p.cities.length) return 0;
     const dist = new Map(p.cities.map((c) => [c, 0]));
@@ -403,23 +528,29 @@ export class Game {
       if (best === null) return Infinity;
       if (best === target) return dist.get(best);
       done.add(best);
-      for (const e of EDGES) {
-        const other = e.a === best ? e.b : e.b === best ? e.a : null;
-        if (!other || !this.activeCities.has(other)) continue;
-        const nd = dist.get(best) + e.cost;
-        if (!dist.has(other) || nd < dist.get(other)) dist.set(other, nd);
+      for (const { city, cost } of this.neighbors[best] || []) {
+        if (!this.activeCities.has(city)) continue;
+        const nd = dist.get(best) + cost;
+        if (!dist.has(city) || nd < dist.get(city)) dist.set(city, nd);
       }
     }
   }
 
   quoteBuild(playerId, cityId) {
     const p = this.player(playerId);
-    check(this.activeCities.has(cityId), 'That city is not in play');
-    const owners = this.cityOwners[cityId];
-    check(!owners.includes(playerId), 'You already have a house there');
-    check(owners.length < this.step, `Only ${this.step} house(s) per city in Step ${this.step}`);
-    const conn = this.connectionCost(p, cityId);
-    return { connection: conn, slot: CITY_SLOT_COST[owners.length], total: conn + CITY_SLOT_COST[owners.length] };
+    check(this.activeCities.has(cityId), 'That city is not in the playing zone');
+    const slots = this.citySlots[cityId];
+    check(!slots.includes(playerId), 'You already have a house there');
+    let slot = -1;
+    for (let i = 0; i < this.step; i++) {
+      if (slots[i] === null) {
+        slot = i;
+        break;
+      }
+    }
+    check(slot >= 0, `${this.cityName(cityId)} has no free space during Step ${this.step}`);
+    const connection = this.connectionCost(p, cityId);
+    return { slot, connection, building: CITY_SLOT_COST[slot], total: connection + CITY_SLOT_COST[slot] };
   }
 
   build(playerId, cityId) {
@@ -429,10 +560,16 @@ export class Game {
     check(q.total <= p.money, 'You cannot afford that city');
     p.money -= q.total;
     p.cities.push(cityId);
-    this.cityOwners[cityId].push(playerId);
+    this.citySlots[cityId][q.slot] = playerId;
     this.builtThisTurn.push(cityId);
-    this.addLog(`${p.name} builds in ${cityById[cityId].name} for ${q.total}.`);
-    this.pruneSmallPlants();
+    this.addLog(`${p.name} builds in ${this.cityName(cityId)} for ${q.total}.`);
+    // Rulebook p. 10: connecting an empty city puts a Trust house on its 15 space.
+    if (this.trust && q.slot === 0 && this.trust.housesLeft > 0) {
+      this.citySlots[cityId][1] = TRUST.id;
+      this.trust.cities.push(cityId);
+      this.trust.housesLeft--;
+      this.addLog(`The Trust also moves into ${this.cityName(cityId)}.`);
+    }
   }
 
   endBuild(playerId) {
@@ -440,8 +577,14 @@ export class Game {
     if (!this.builtThisTurn.length) this.addLog(`${this.player(playerId).name} builds nothing.`);
     this.builtThisTurn = [];
     this.turnQueue.shift();
-    if (this.turnQueue.length) return;
+    this.runAutomaticTurns();
+  }
 
+  // ---------- phase 5: bureaucracy ----------
+
+  startBureaucracy() {
+    this.phase = 'bureaucracy';
+    this.powerChoices = {};
     if (this.maxCities() >= this.rules.endCities) {
       this.endTriggered = true;
       this.addLog('A network has reached the end-game size. This is the final Bureaucracy!');
@@ -449,20 +592,15 @@ export class Game {
     if (this.step === 1 && this.maxCities() >= this.rules.step2Cities) {
       this.step = 2;
       this.addLog('Step 2 has begun: 2 houses fit in each city.');
-      this.removeLowestAndReplace();
+      this.removeLowestAndReplace('is removed for Step 2');
     }
-    this.resolvePendingStep3();
-    this.phase = 'bureaucracy';
-    this.powerChoices = {};
   }
-
-  // ---------- phase 5: bureaucracy ----------
 
   // Resources burned to fire `plantNs`; hybrids burn coal first unless the
   // player names how much coal each hybrid should use.
   firingPlan(p, plantNs, hybridCoal = {}) {
     check(Array.isArray(plantNs) && new Set(plantNs).size === plantNs.length, 'Invalid plant list');
-    const use = { coal: 0, oil: 0, garbage: 0, uranium: 0 };
+    const use = emptyRes();
     let capacity = 0;
     const hybrids = [];
     for (const n of plantNs) {
@@ -473,10 +611,10 @@ export class Game {
       else if (plant.type !== 'eco') use[plant.type] += plant.input;
     }
     for (const h of hybrids) {
-      const wanted = hybridCoal[h.n];
-      let coal;
-      if (Number.isInteger(wanted)) coal = Math.max(0, Math.min(h.input, wanted));
-      else coal = Math.min(h.input, Math.max(0, p.res.coal - use.coal));
+      const wanted = hybridCoal?.[h.n];
+      const coal = Number.isInteger(wanted)
+        ? Math.max(0, Math.min(h.input, wanted))
+        : Math.min(h.input, Math.max(0, p.res.coal - use.coal));
       use.coal += coal;
       use.oil += h.input - coal;
     }
@@ -507,10 +645,12 @@ export class Game {
         this.addLog(`${p.name} powers ${plan.powered} cities.`);
       }
     }
+    if (this.trust) this.trust.res = emptyRes(); // back to the supply
     if (this.endTriggered) return this.finishGame();
 
     this.resupply();
-    this.updateMarketEndOfRound();
+    if (!this.step3NextRound) this.updateMarketEndOfRound();
+    if (this.step3NextRound) this.beginStep3();
     this.round++;
     this.determineOrder();
     this.startAuctionPhase();
@@ -518,9 +658,10 @@ export class Game {
 
   resupply() {
     const table = RESUPPLY[this.players.length];
+    const holders = this.trust ? [...this.players, this.trust] : this.players;
     for (const r of RES_TYPES) {
-      const inPlants = this.players.reduce((s, p) => s + p.res[r], 0);
-      const bank = RES_TOTAL[r] - inPlants - this.resMarket[r];
+      const held = holders.reduce((s, p) => s + p.res[r], 0);
+      const bank = RES_TOTAL[r] - held - this.resMarket[r];
       const room = SLOT_PRICES[r].length - this.resMarket[r];
       this.resMarket[r] += Math.max(0, Math.min(table[r][this.step - 1], bank, room));
     }
@@ -531,8 +672,7 @@ export class Game {
     if (this.step === 3) {
       this.removeLowestAndReplace();
     } else {
-      const highest = this.market.pop();
-      this.deck.push(highest);
+      this.deck.push(this.market.pop());
       this.drawIntoMarket();
     }
   }
@@ -553,6 +693,7 @@ export class Game {
     check(this.phase !== 'gameover', 'The game is over');
     check(action && typeof action.type === 'string', 'Invalid action');
     switch (action.type) {
+      case 'placeTrust': return this.placeTrust(playerId, action.city);
       case 'startAuction': return this.startAuction(playerId, action.plant, action.bid);
       case 'passAuction': return this.passAuction(playerId);
       case 'bid': return this.bid(playerId, action.amount);
@@ -569,6 +710,8 @@ export class Game {
   // Who the game is waiting on right now.
   waitingOn() {
     switch (this.phase) {
+      case 'trustSetup':
+        return [this.trustSetupQueue[0]];
       case 'auction': {
         const a = this.auction;
         if (a.pendingDiscard) return [a.pendingDiscard];
@@ -586,32 +729,40 @@ export class Game {
   }
 
   publicState() {
-    const marketSize = this.step === 3 ? this.market.length : 4;
+    const actual = new Set(this.actualMarket());
     return {
+      mapId: this.map.id,
       round: this.round,
       step: this.step,
       phase: this.phase,
       order: this.order,
       regions: this.regions,
+      activeCities: [...this.activeCities],
       rules: this.rules,
-      players: this.players.map((p) => ({ ...p, plants: p.plants, res: { ...p.res } })),
-      market: this.market.map((p, i) => ({ ...p, buyable: i < marketSize && p.type !== 'step3' })),
+      players: this.players.map((p) => ({ ...p, plants: [...p.plants], res: { ...p.res }, cities: [...p.cities] })),
+      trust: this.trust ? { ...this.trust, plants: [...this.trust.plants], res: { ...this.trust.res }, cities: [...this.trust.cities] } : null,
+      market: this.market.map((p) => ({ ...p, buyable: actual.has(p), minBid: isPlant(p) ? this.minimumBid(p) : null })),
+      discount: this.phase === 'auction' ? this.discount : null,
       deckSize: this.deck.length,
+      step3Pending: this.step3Pending,
       resMarket: { ...this.resMarket },
-      cityOwners: this.cityOwners,
+      citySlots: this.citySlots,
+      trustSetupQueue: this.phase === 'trustSetup' ? this.trustSetupQueue : [],
       auction: this.phase === 'auction' ? {
         chooser: this.auctionChooser(),
         queue: this.auction.queue,
         current: this.auction.current,
         pendingDiscard: this.auction.pendingDiscard,
+        justBought: this.auction.justBought,
       } : null,
       turnQueue: this.phase === 'resources' || this.phase === 'build' ? this.turnQueue : [],
+      builtThisTurn: this.phase === 'build' ? this.builtThisTurn : [],
       powered: this.phase === 'bureaucracy' ? Object.keys(this.powerChoices) : [],
       waitingOn: this.waitingOn(),
       endTriggered: this.endTriggered,
       winner: this.winner,
       ranking: this.ranking || null,
-      log: this.log.slice(-60),
+      log: this.log.slice(-80),
     };
   }
 }

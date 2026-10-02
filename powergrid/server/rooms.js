@@ -3,6 +3,7 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Game, GameError } from './game/engine.js';
+import { MAPS, DEFAULT_MAP } from './game/map.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_PLAYERS = 6;
@@ -31,7 +32,7 @@ export class RoomManager {
 
   create(name) {
     const code = this.newCode();
-    const room = { code, hostId: null, players: [], game: null, touched: Date.now() };
+    const room = { code, hostId: null, players: [], game: null, mapId: DEFAULT_MAP, touched: Date.now() };
     this.rooms.set(code, room);
     const seat = this.join(code, name);
     room.hostId = seat.id;
@@ -70,11 +71,20 @@ export class RoomManager {
     if (room.hostId === playerId) room.hostId = room.players[0].id;
   }
 
+  configure(room, playerId, { mapId } = {}) {
+    if (room.hostId !== playerId) throw new RoomError('Only the host can change settings');
+    if (room.game) throw new RoomError('The game has already started');
+    if (mapId !== undefined) {
+      if (!Object.hasOwn(MAPS, mapId)) throw new RoomError('Unknown map');
+      room.mapId = mapId;
+    }
+  }
+
   start(room, playerId) {
     if (room.hostId !== playerId) throw new RoomError('Only the host can start the game');
     if (room.game) throw new RoomError('The game has already started');
     if (room.players.length < 2) throw new RoomError('You need at least 2 players');
-    room.game = new Game(room.players.map(({ id, name }) => ({ id, name })));
+    room.game = new Game(room.players.map(({ id, name }) => ({ id, name })), { mapId: room.mapId });
     room.touched = Date.now();
   }
 
@@ -88,6 +98,7 @@ export class RoomManager {
     return {
       code: room.code,
       hostId: room.hostId,
+      mapId: room.mapId,
       players: room.players.map(({ id, name, connected }) => ({ id, name, connected })),
       game: room.game ? room.game.publicState() : null,
     };

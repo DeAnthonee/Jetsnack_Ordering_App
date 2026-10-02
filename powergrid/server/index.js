@@ -4,8 +4,8 @@ import path from 'node:path';
 import express from 'express';
 import { Server } from 'socket.io';
 import { RoomManager, RoomError, isUserError } from './rooms.js';
-import { CITIES, EDGES, REGIONS, MAP_WIDTH, MAP_HEIGHT } from './game/map.js';
-import { SLOT_PRICES, PAYMENT, CITY_SLOT_COST } from './game/data.js';
+import { MAPS, mapView } from './game/map.js';
+import { SLOT_PRICES, PAYMENT, CITY_SLOT_COST, RESUPPLY } from './game/data.js';
 
 const PORT = process.env.PORT || 3000;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -13,7 +13,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.static(path.join(here, '..', 'public')));
 app.get('/api/static-data', (_req, res) => {
-  res.json({ cities: CITIES, edges: EDGES, regions: REGIONS, width: MAP_WIDTH, height: MAP_HEIGHT, slotPrices: SLOT_PRICES, payment: PAYMENT, citySlotCost: CITY_SLOT_COST });
+  res.json({
+    maps: Object.fromEntries(Object.values(MAPS).map((m) => [m.id, mapView(m)])),
+    slotPrices: SLOT_PRICES,
+    payment: PAYMENT,
+    citySlotCost: CITY_SLOT_COST,
+    resupply: RESUPPLY,
+  });
 });
 
 const httpServer = createServer(app);
@@ -83,6 +89,12 @@ io.on('connection', (socket) => {
   socket.on('start', handle(() => {
     inRoom();
     rooms.start(room, seat.id);
+    broadcast(room);
+  }));
+
+  socket.on('settings', handle((settings) => {
+    inRoom();
+    rooms.configure(room, seat.id, settings);
     broadcast(room);
   }));
 

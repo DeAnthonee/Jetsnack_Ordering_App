@@ -56,14 +56,22 @@ export const STEP3_CARD = { n: 99, type: 'step3', input: 0, output: 0 };
 
 export const STARTING_MONEY = 50;
 
-// Rules that depend on player count.
+// Rules that depend on player count (rulebook pp. 2, 3, 7, 11).
+// removePlug / removeSocket: cards removed at random from the 03-15 ("plug")
+// and 16-50 ("socket") piles during setup.
 export const PLAYER_RULES = {
-  2: { regions: 3, removeCards: 8, maxPlants: 4, step2Cities: 10, endCities: 21 },
-  3: { regions: 3, removeCards: 8, maxPlants: 3, step2Cities: 7, endCities: 17 },
-  4: { regions: 4, removeCards: 4, maxPlants: 3, step2Cities: 7, endCities: 17 },
-  5: { regions: 5, removeCards: 0, maxPlants: 3, step2Cities: 7, endCities: 15 },
-  6: { regions: 5, removeCards: 0, maxPlants: 3, step2Cities: 6, endCities: 14 },
+  2: { regions: 3, removePlug: 1, removeSocket: 5, maxPlants: 3, step2Cities: 7, endCities: 18 },
+  3: { regions: 3, removePlug: 2, removeSocket: 6, maxPlants: 3, step2Cities: 7, endCities: 17 },
+  4: { regions: 4, removePlug: 1, removeSocket: 3, maxPlants: 3, step2Cities: 7, endCities: 17 },
+  5: { regions: 5, removePlug: 0, removeSocket: 0, maxPlants: 3, step2Cities: 7, endCities: 15 },
+  6: { regions: 5, removePlug: 0, removeSocket: 0, maxPlants: 3, step2Cities: 6, endCities: 14 },
 };
+
+// Cards 03-15 have a plug on the back; 16-50 have a socket.
+export const PLUG_MAX = 15;
+
+// 2-player "Against the Trust" variant.
+export const TRUST = { id: 'trust', name: 'The Trust', color: '#7a7a7a', houses: 16, startHouses: 6 };
 
 // Price of each slot in the resource market, cheapest first.
 export const SLOT_PRICES = {
@@ -76,8 +84,8 @@ export const SLOT_PRICES = {
 // Total pieces of each resource in the game (market + plants + bank).
 export const RES_TOTAL = { coal: 24, oil: 24, garbage: 24, uranium: 12 };
 
-// Starting market: coal fills 1-8, oil 3-8, garbage 7-8, uranium 14-16.
-export const RES_START = { coal: 24, oil: 18, garbage: 6, uranium: 2 };
+// Starting market: coal fills spaces 1-8, oil 3-8, garbage 6-8, uranium 14-16.
+export const RES_START = { coal: 24, oil: 18, garbage: 9, uranium: 2 };
 
 // Resupply per round: [step1, step2, step3] for each resource and player count.
 export const RESUPPLY = {
