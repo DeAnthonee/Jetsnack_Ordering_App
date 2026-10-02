@@ -179,3 +179,16 @@ label { display: block; margin: .5rem 0; }
 .help-body h4 { color: var(--accent); margin: 1rem 0 .3rem; }
 .help-body ol, .help-body ul { padding-left: 1.3rem; }
 .help-body li { margin: .3rem 0; }
+
+/* Version badge */
+.version {
+  position: fixed; left: .5rem; bottom: .5rem; z-index: 40;
+  font-family: ui-monospace, monospace; font-size: .75rem; padding: .15rem .5rem;
+  background: rgba(0,0,0,.6); border-color: var(--border); color: var(--muted);
+}
+.version:hover { color: var(--text); }
+#changelog { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 0; max-width: 640px; width: calc(100% - 2rem); max-height: 85vh; }
+#changelog::backdrop { background: rgba(0,0,0,.6); }
+#changelog-body h4 { display: flex; justify-content: space-between; }
+#changelog-body h4 span { color: var(--muted); font-weight: 400; font-size: .85rem; }
+#map-legend { bottom: 2.4rem; }

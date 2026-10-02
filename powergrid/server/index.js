@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import { RoomManager, RoomError, isUserError } from './rooms.js';
 import { MAPS, mapView } from './game/map.js';
 import { SLOT_PRICES, PAYMENT, CITY_SLOT_COST, RESUPPLY } from './game/data.js';
+import { VERSION, CHANGELOG } from './version.js';
 
 const PORT = process.env.PORT || 3000;
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -21,8 +22,11 @@ app.get('/api/static-data', (_req, res) => {
     payment: PAYMENT,
     citySlotCost: CITY_SLOT_COST,
     resupply: RESUPPLY,
+    version: VERSION,
+    changelog: CHANGELOG,
   });
 });
+app.get('/api/version', (_req, res) => res.json({ version: VERSION }));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer);
@@ -137,5 +141,5 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 httpServer.listen(PORT, () => {
-  console.log(`Power Grid server running on http://localhost:${PORT}`);
+  console.log(`Power Grid v${VERSION} running on http://localhost:${PORT}`);
 });

@@ -607,8 +607,18 @@
 
   // ---------- boot ----------
 
+  function renderVersion() {
+    $('#version').textContent = `v${state.data.version}`;
+    $('#changelog-body').innerHTML = state.data.changelog.map((e) => `
+      <h4>v${esc(e.version)} <span>${esc(e.date)}</span></h4>
+      <ul>${e.changes.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>`).join('');
+  }
+  $('#version').onclick = () => $('#changelog').showModal();
+  $('#changelog-close').onclick = () => $('#changelog').close();
+
   fetch('/api/static-data').then((r) => r.json()).then((data) => {
     state.data = data;
+    renderVersion();
     try {
       const saved = JSON.parse(localStorage.getItem('pg-session'));
       if (saved?.code && saved?.token) {
