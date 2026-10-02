@@ -9,15 +9,14 @@ import { getMap, regionAdjacency, DEFAULT_MAP } from './map.js';
 
 export class GameError extends Error {}
 
-function mulberry32(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+// Seeded PRNG whose state is a single integer, so a saved game can resume
+// with the same shuffle sequence.
+function nextRandom(game) {
+  game.randState = (game.randState + 0x6d2b79f5) >>> 0;
+  let t = game.randState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
 
 const byNumber = (a, b) => a.n - b.n;
@@ -59,14 +58,10 @@ export class Game {
   constructor(players, { seed = Date.now(), mapId = DEFAULT_MAP, regions = null } = {}) {
     const count = players.length;
     check(count >= 2 && count <= 6, 'Power Grid needs 2-6 players');
-    this.rand = mulberry32(seed);
+    this.randState = seed >>> 0;
     this.rules = PLAYER_RULES[count];
-    this.map = getMap(mapId);
-    this.neighbors = {};
-    for (const e of this.map.edges) {
-      (this.neighbors[e.a] ||= []).push({ city: e.b, cost: e.cost });
-      (this.neighbors[e.b] ||= []).push({ city: e.a, cost: e.cost });
-    }
+    this.mapId = mapId;
+    this.attachMap();
 
     this.players = players.map((p, i) => ({
       id: p.id,
@@ -117,6 +112,34 @@ export class Game {
   }
 
   // ---------- setup helpers ----------
+
+  rand() {
+    return nextRandom(this);
+  }
+
+  // Derived, non-serialised lookups for the current map.
+  attachMap() {
+    this.map = getMap(this.mapId);
+    this.neighbors = {};
+    for (const e of this.map.edges) {
+      (this.neighbors[e.a] ||= []).push({ city: e.b, cost: e.cost });
+      (this.neighbors[e.b] ||= []).push({ city: e.a, cost: e.cost });
+    }
+  }
+
+  // Plain-object snapshot that restore() turns back into a Game.
+  serialize() {
+    const { map, neighbors, activeCities, ...rest } = this;
+    return { ...rest, activeCities: [...activeCities] };
+  }
+
+  static restore(data) {
+    const g = Object.create(Game.prototype);
+    Object.assign(g, data);
+    g.activeCities = new Set(data.activeCities);
+    g.attachMap();
+    return g;
+  }
 
   shuffle(arr) {
     const a = [...arr];

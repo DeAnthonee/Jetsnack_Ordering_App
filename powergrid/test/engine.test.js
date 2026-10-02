@@ -192,7 +192,7 @@ test('on the Germany map, buying plant 39 stops uranium resupply', () => {
 
 function chooseAction(g, id) {
   const p = g.players.find((x) => x.id === id);
-  const rand = g.rand;
+  const rand = () => g.rand();
   switch (g.phase) {
     case 'trustSetup': {
       const options = [...g.activeCities].filter((c) => {
@@ -302,6 +302,18 @@ test('bots can play complete games for every player count on both maps', () => {
           g.apply(id, chooseAction(g, id));
           checkInvariants(g);
           assert.ok(++guard < 20000, 'game made progress');
+        }
+        // A game saved and restored mid-way must continue identically.
+        if (seed % 5 === 0 && g.phase !== 'gameover') {
+          const copy = Game.restore(JSON.parse(JSON.stringify(g.serialize())));
+          assert.deepEqual(copy.publicState(), g.publicState());
+          for (let k = 0; k < 30 && g.phase !== 'gameover'; k++) {
+            const [id] = g.waitingOn();
+            const action = chooseAction(g, id);
+            g.apply(id, action);
+            copy.apply(id, action);
+          }
+          assert.deepEqual(copy.publicState(), g.publicState(), 'restored game stays in sync');
         }
         if (g.phase === 'gameover') finished++;
         if (g.step === 3) reachedStep3++;

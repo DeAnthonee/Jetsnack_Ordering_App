@@ -18,6 +18,12 @@ npm start          # http://localhost:3000
 
 `PORT=8080 npm start` changes the port.
 
+Lobbies and games are saved to `powergrid/data/rooms.json` after every
+change and restored when the server starts, so a restart (for example a
+deploy) does not end a game in progress; players' browsers rejoin on
+their own. `DATA_FILE=/some/path.json` moves the file; `DATA_FILE=none`
+turns saving off.
+
 ## Host it online
 
 The server keeps games in memory, so it needs one always-on instance.
@@ -45,13 +51,15 @@ Railway reads `railway.json` and builds the Dockerfile.
 - Two maps: Germany (from the Recharged board) and an original USA layout
 - The 2-player "Against the Trust" variant
 - Germany's nuclear phase-out rule (plant 39 stops uranium resupply)
-- In-game chat and log
+- In-game chat, log, and a "How to play" guide
+- Games saved to disk and restored after a restart
 
 ## Layout
 
 ```
 server/index.js        Express + Socket.IO entry point
 server/rooms.js        lobbies, seats, reconnect tokens
+server/store.js        saves lobbies to disk and restores them on start
 server/game/engine.js  the rules engine (all game state lives here)
 server/game/data.js    plants, prices, resupply and payment tables
 server/game/map.js     the two maps

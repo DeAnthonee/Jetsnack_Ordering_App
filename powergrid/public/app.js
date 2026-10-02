@@ -95,6 +95,9 @@
     $('#chat-input').value = '';
   };
 
+  for (const b of document.querySelectorAll('.help-btn')) b.onclick = () => $('#help').showModal();
+  $('#help-close').onclick = () => $('#help').close();
+
   socket.on('joined', ({ code, playerId, token }) => {
     state.code = code;
     state.me = playerId;
