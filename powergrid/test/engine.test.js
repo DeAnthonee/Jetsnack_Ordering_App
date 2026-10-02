@@ -287,13 +287,13 @@ function checkInvariants(g) {
   if (g.step === 3) assert.ok(g.market.length <= 6);
 }
 
-test('bots can play complete games for every player count on both maps', () => {
+test('bots can play complete games for every player count on every map', () => {
   let finished = 0;
   let reachedStep3 = 0;
   let games = 0;
-  for (const mapId of ['germany', 'usa']) {
+  for (const mapId of ['germany', 'usa', 'heroverse']) {
     for (let players = 2; players <= 6; players++) {
-      for (let seed = 1; seed <= 25; seed++) {
+      for (let seed = 1; seed <= 17; seed++) {
         const g = new Game(makePlayers(players), { seed: seed * 7919 + players, mapId });
         games++;
         let guard = 0;

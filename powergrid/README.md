@@ -48,7 +48,7 @@ Railway reads `railway.json` and builds the Dockerfile.
   connection costs, bureaucracy with payment and resupply
 - Steps 1–3, including the Step 3 card drawn during the auction or during
   bureaucracy, and game end with the "most cities powered" tiebreaks
-- Two maps: Germany (from the Recharged board) and an original USA layout
+- Three maps: Germany and USA (both from the Recharged board) and Heroverse, the USA layout with fictional pop-culture cities
 - The 2-player "Against the Trust" variant
 - Germany's nuclear phase-out rule (plant 39 stops uranium resupply)
 - In-game chat, log, and a "How to play" guide
@@ -62,7 +62,7 @@ server/rooms.js        lobbies, seats, reconnect tokens
 server/store.js        saves lobbies to disk and restores them on start
 server/game/engine.js  the rules engine (all game state lives here)
 server/game/data.js    plants, prices, resupply and payment tables
-server/game/map.js     the two maps
+server/game/map.js     the maps
 public/                the browser client (vanilla JS, no build step)
 test/                  engine tests, including bot-played full games
 ```
@@ -73,5 +73,5 @@ test/                  engine tests, including bot-played full games
 npm test
 ```
 
-The test suite plays 250 complete games with simple bots across both maps
+The test suite plays 250 complete games with simple bots across every map
 and every player count, checking rule invariants after every action.
