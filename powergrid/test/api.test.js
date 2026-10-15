@@ -146,7 +146,7 @@ test('the MCP endpoint lists its tools and plays a move', async () => {
   assert.equal(init.result.serverInfo.name, 'power-grid');
   const tools = await rpc(2, 'tools/list', {});
   const names = tools.result.tools.map((t) => t.name);
-  for (const n of ['rules', 'create_lobby', 'join_lobby', 'get_state', 'wait_for_turn', 'act', 'start_game', 'add_computer_player']) assert.ok(names.includes(n), n);
+  for (const n of ['rules', 'create_lobby', 'join_lobby', 'get_state', 'wait_for_turn', 'act', 'start_game', 'add_computer_player', 'send_chat', 'say', 'read_chat']) assert.ok(names.includes(n), n);
 
   const created = await rpc(3, 'tools/call', { name: 'create_lobby', arguments: { name: 'Claude' } });
   const { token } = JSON.parse(created.result.content[0].text);
@@ -192,11 +192,13 @@ test('chat is stored with the room and readable by AIs', async () => {
     const line = text.split('\n').find((l) => l.startsWith('data:'));
     return JSON.parse(line ? line.slice(5) : text);
   };
-  const said = await rpc(1, 'tools/call', { name: 'say', arguments: { token: guest, text: 'yes, ready' } });
+  const said = await rpc(1, 'tools/call', { name: 'send_chat', arguments: { token: guest, text: 'yes, ready' } });
   assert.ok(JSON.parse(said.result.content[0].text).ok);
+  const alias = await rpc(9, 'tools/call', { name: 'say', arguments: { token: guest, text: 'alias works' } });
+  assert.ok(JSON.parse(alias.result.content[0].text).ok);
   const read = JSON.parse((await rpc(2, 'tools/call', { name: 'read_chat', arguments: { token, since: 2 } })).result.content[0].text);
-  assert.deepEqual(read.messages.map((m) => `${m.from}: ${m.text}`), ['Guest: yes, ready']);
-  assert.equal(read.cursor, 3);
+  assert.deepEqual(read.messages.map((m) => `${m.from}: ${m.text}`), ['Guest: yes, ready', 'Guest: alias works']);
+  assert.equal(read.cursor, 4);
 });
 
 test('a program can watch a game without a seat', async () => {
