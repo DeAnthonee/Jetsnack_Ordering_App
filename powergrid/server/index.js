@@ -47,7 +47,28 @@ const io = new Server(httpServer);
 const rooms = new RoomManager({ file: DATA_FILE });
 setInterval(() => rooms.sweep(), 10 * 60 * 1000).unref();
 
+const BOT_DELAY_MS = 900;
 const broadcast = (room) => io.to(room.code).emit('room', rooms.view(room));
+
+// Bots act one step at a time with a short pause, so people can follow.
+const botTimers = new Map();
+function scheduleBots(room) {
+  if (botTimers.has(room.code) || !rooms.pendingBot(room)) return;
+  const t = setTimeout(() => {
+    botTimers.delete(room.code);
+    if (!rooms.rooms.has(room.code)) return;
+    try {
+      rooms.stepBot(room);
+    } catch (err) {
+      console.error('bot error', err);
+    }
+    broadcast(room);
+    scheduleBots(room);
+  }, BOT_DELAY_MS);
+  t.unref();
+  botTimers.set(room.code, t);
+}
+for (const room of rooms.rooms.values()) scheduleBots(room);
 
 io.on('connection', (socket) => {
   let room = null;
@@ -102,8 +123,21 @@ io.on('connection', (socket) => {
     seat.connected = false;
     rooms.leave(room, seat.id);
     broadcast(room);
+    scheduleBots(room);
     room = null;
     seat = null;
+  }));
+
+  socket.on('addBot', handle(() => {
+    inRoom();
+    rooms.addBot(room, seat.id);
+    broadcast(room);
+  }));
+
+  socket.on('removeBot', handle(({ id }) => {
+    inRoom();
+    rooms.removeBot(room, seat.id, id);
+    broadcast(room);
   }));
 
   socket.on('endGame', handle(() => {
@@ -116,6 +150,7 @@ io.on('connection', (socket) => {
     inRoom();
     rooms.start(room, seat.id);
     broadcast(room);
+    scheduleBots(room);
   }));
 
   socket.on('settings', handle((settings) => {
@@ -128,6 +163,7 @@ io.on('connection', (socket) => {
     inRoom();
     rooms.act(room, seat.id, action);
     broadcast(room);
+    scheduleBots(room);
   }));
 
   socket.on('chat', handle(({ text }) => {

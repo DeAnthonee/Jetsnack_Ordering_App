@@ -25,7 +25,7 @@ export class Store {
       try {
         rooms.set(r.code, {
           ...r,
-          players: r.players.map((p) => ({ ...p, connected: false })),
+          players: r.players.map((p) => ({ ...p, connected: !!p.bot })),
           game: r.game ? Game.restore(r.game) : null,
         });
         count++;

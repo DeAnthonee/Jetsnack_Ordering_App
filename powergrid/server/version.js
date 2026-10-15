@@ -1,9 +1,16 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.4.1';
+export const VERSION = '1.5.0';
 
 export const CHANGELOG = [
+  {
+    version: '1.5.0',
+    date: '2026-10-15',
+    changes: [
+      'Computer players: the host can add up to five from the lobby; they bid, buy fuel, build and power on their own',
+    ],
+  },
   {
     version: '1.4.1',
     date: '2026-10-02',
