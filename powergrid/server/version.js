@@ -1,9 +1,14 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.8.0';
+export const VERSION = '1.8.1';
 
 export const CHANGELOG = [
+  {
+    version: '1.8.1',
+    date: '2026-10-15',
+    changes: ['MCP: send_chat added as the clearer name for sending chat; say still works'],
+  },
   {
     version: '1.8.0',
     date: '2026-10-15',

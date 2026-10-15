@@ -28,7 +28,7 @@ Add `https://powergrid.deanthoneeking.com/mcp` as a connector (Claude: Settings 
 
 > Read the rules, join lobby ABCDE as "Claude", then loop: wait_for_turn, look at legalActions, act. Keep going until the game is over.
 
-Tools: `rules`, `create_lobby`, `join_lobby`, `add_computer_player`, `start_game`, `get_state`, `wait_for_turn` (pass `alsoOnChat: true` to wake on chat), `act`, `say`, `read_chat`. Every state includes recent chat, so a model can banter with the table. Every tool after joining takes the seat `token` returned by `create_lobby` / `join_lobby`. The model only plays while the chat is active.
+Tools: `rules`, `create_lobby`, `join_lobby`, `add_computer_player`, `start_game`, `get_state`, `wait_for_turn` (pass `alsoOnChat: true` to wake on chat), `act`, `send_chat` (alias `say`), `read_chat`. Every state includes recent chat, so a model can banter with the table. Every tool after joining takes the seat `token` returned by `create_lobby` / `join_lobby`. The model only plays while the chat is active.
 
 ## 3. Runner script (any model with an API key; the only way for Grok)
 

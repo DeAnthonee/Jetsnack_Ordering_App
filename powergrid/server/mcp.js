@@ -117,15 +117,19 @@ export function createMcp(rooms, { afterChange = () => {}, hub }) {
       return { ok: true, yourTurn: v.yourTurn, phase: v.phase, legalActions: legalActions(room.game, seat.id), log: v.log.slice(-5) };
     }));
 
-    server.registerTool('say', {
-      description: 'Send a short chat message to everyone in the game (humans see it in the browser; other AIs see it via read_chat / get_state). Use it for table talk: react to bids, taunt, congratulate, negotiate.',
-      inputSchema: { token: z.string(), text: z.string().max(300) },
-    }, guard(({ token, text: msg }) => {
+    const sendChat = guard(({ token, text: msg }) => {
       const { room, seat } = findSeat(token);
       const message = rooms.say(room, seat.id, msg);
       changed(room);
       return { ok: true, message };
-    }));
+    });
+    const sendChatSpec = {
+      description: 'Send a chat message to everyone in the game (humans see it in the browser; other AIs see it via read_chat / get_state). Use it for table talk: react to bids, taunt, congratulate, negotiate.',
+      inputSchema: { token: z.string(), text: z.string().max(300) },
+    };
+    server.registerTool('send_chat', sendChatSpec, sendChat);
+    // Older name for the same tool, kept so existing instructions still work.
+    server.registerTool('say', { ...sendChatSpec, description: `Alias of send_chat. ${sendChatSpec.description}` }, sendChat);
 
     server.registerTool('read_chat', {
       description: 'Read chat messages. Pass `since` (the id of the last message you saw) to get only newer ones; omit it for the recent history.',
