@@ -9,6 +9,7 @@ import { chooseAction, safeAction, BOT_NAMES } from './game/bot.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_PLAYERS = 6;
+const CHAT_KEEP = 200;
 const IDLE_ROOM_MS = 6 * 60 * 60 * 1000;
 
 export class RoomError extends Error {}
@@ -42,7 +43,7 @@ export class RoomManager {
 
   create(name) {
     const code = this.newCode();
-    const room = { code, hostId: null, players: [], game: null, mapId: DEFAULT_MAP, touched: Date.now() };
+    const room = { code, hostId: null, players: [], game: null, mapId: DEFAULT_MAP, chat: [], chatSeq: 0, touched: Date.now() };
     this.rooms.set(code, room);
     const seat = this.join(code, name);
     room.hostId = seat.id;
@@ -64,6 +65,29 @@ export class RoomManager {
     room.touched = Date.now();
     this.changed();
     return seat;
+  }
+
+  // ---------- chat ----------
+
+  // Append a chat message from a seat; kept with the room so it survives
+  // refreshes and restarts, and so AIs can read it.
+  say(room, playerId, text) {
+    const seat = room.players.find((p) => p.id === playerId);
+    if (!seat) throw new RoomError('You are not in this lobby');
+    const clean = String(text || '').trim().slice(0, 300);
+    if (!clean) throw new RoomError('Empty message');
+    room.chat ||= [];
+    room.chatSeq = (room.chatSeq || 0) + 1;
+    const msg = { id: room.chatSeq, from: seat.name, playerId: seat.id, text: clean, at: Date.now() };
+    room.chat.push(msg);
+    if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
+    room.touched = Date.now();
+    this.changed();
+    return msg;
+  }
+
+  chatSince(room, sinceId = 0) {
+    return (room.chat || []).filter((m) => m.id > sinceId);
   }
 
   // ---------- computer players ----------
@@ -197,6 +221,7 @@ export class RoomManager {
       hostId: room.hostId,
       mapId: room.mapId,
       players: room.players.map(({ id, name, connected, quit, bot }) => ({ id, name, connected, quit: !!quit, bot: !!bot })),
+      chat: (room.chat || []).slice(-80),
       game: room.game ? room.game.publicState() : null,
     };
   }

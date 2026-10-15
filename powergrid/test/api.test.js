@@ -163,3 +163,38 @@ test('the MCP endpoint lists its tools and plays a move', async () => {
   const bad = await rpc(8, 'tools/call', { name: 'act', arguments: { token: 'nope', action: {} } });
   assert.ok(bad.result.isError);
 });
+
+test('chat is stored with the room and readable by AIs', async () => {
+  const { data: { token, code } } = await call('POST', '/api/v1/lobbies', { body: { name: 'Host' } });
+  const { data: { token: guest } } = await call('POST', `/api/v1/lobbies/${code}/join`, { body: { name: 'Guest' } });
+  assert.equal((await call('POST', '/api/v1/chat', { token, body: { text: '   ' } })).status, 400, 'empty messages rejected');
+  await call('POST', '/api/v1/chat', { token, body: { text: 'hello table' } });
+  const me = (await call('GET', '/api/v1/me', { token: guest })).data;
+  assert.equal(me.chat.length, 1);
+  assert.equal(me.chat[0].from, 'Host');
+  assert.equal(me.chatCursor, 1);
+
+  // wait?chat=1 wakes on a new message from someone else.
+  const t0 = Date.now();
+  const waiting = call('GET', `/api/v1/wait?timeout=20&chat=1&since=${me.chatCursor}`, { token: guest });
+  await new Promise((r) => setTimeout(r, 50));
+  await call('POST', '/api/v1/chat', { token, body: { text: 'you there?' } });
+  const woke = await waiting;
+  assert.ok(Date.now() - t0 < 5000, 'woke on chat');
+  assert.equal(woke.data.chat.at(-1).text, 'you there?');
+  const since = (await call('GET', '/api/v1/chat?since=1', { token: guest })).data.messages;
+  assert.deepEqual(since.map((m) => m.text), ['you there?']);
+
+  // MCP: say and read_chat.
+  const rpc = async (id, method, params) => {
+    const res = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id, method, params }) });
+    const text = await res.text();
+    const line = text.split('\n').find((l) => l.startsWith('data:'));
+    return JSON.parse(line ? line.slice(5) : text);
+  };
+  const said = await rpc(1, 'tools/call', { name: 'say', arguments: { token: guest, text: 'yes, ready' } });
+  assert.ok(JSON.parse(said.result.content[0].text).ok);
+  const read = JSON.parse((await rpc(2, 'tools/call', { name: 'read_chat', arguments: { token, since: 2 } })).result.content[0].text);
+  assert.deepEqual(read.messages.map((m) => `${m.from}: ${m.text}`), ['Guest: yes, ready']);
+  assert.equal(read.cursor, 3);
+});

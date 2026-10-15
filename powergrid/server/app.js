@@ -82,9 +82,6 @@ for (const room of rooms.rooms.values()) scheduleBots(room);
 // wake the bots exactly like a browser action does.
 const onApiChange = (room) => { broadcast(room); scheduleBots(room); };
 const api = createApi(rooms, { afterChange: onApiChange, hub });
-api.hub.on('chat', ({ room, from, text }) => {
-  io.to(room.code).emit('chat', { from: from.name, playerId: from.id, text, at: Date.now() });
-});
 app.use('/api/v1', api.router);
 const handleMcp = createMcp(rooms, { afterChange: onApiChange, hub: api.hub });
 app.post('/mcp', express.json({ limit: '256kb' }), handleMcp);
@@ -188,9 +185,9 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('chat', handle(({ text }) => {
-    if (!room) return;
-    const clean = String(text || '').trim().slice(0, 300);
-    if (clean) io.to(room.code).emit('chat', { from: seat.name, playerId: seat.id, text: clean, at: Date.now() });
+    inRoom();
+    rooms.say(room, seat.id, text);
+    broadcast(room);
   }));
 
   socket.on('disconnect', () => {

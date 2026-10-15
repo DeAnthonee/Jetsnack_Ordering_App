@@ -107,6 +107,9 @@ export function playerView(rooms, room, playerId) {
     started: !!g,
     mapId: room.mapId,
   };
+  const chat = (room.chat || []).slice(-20);
+  base.chat = chat;
+  base.chatCursor = room.chat?.at(-1)?.id ?? 0;
   if (!g) return { ...base, yourTurn: false, legalActions: [] };
   const s = g.publicState();
   const map = g.map;
@@ -197,13 +200,16 @@ export function createApi(rooms, { afterChange = () => {}, hub = new ApiHub() } 
   }));
 
   // Long-poll: returns when it's your turn, the game ends, the lobby
-  // starts, or `timeout` seconds pass (max 50).
+  // starts, or `timeout` seconds pass (max 50). With `chat=1` it also
+  // returns when a chat message newer than `since` arrives.
   router.get('/wait', wrap(async (req) => {
     const { room, seat } = auth(req);
     const timeout = Math.min(50, Math.max(1, Number(req.query.timeout) || 25)) * 1000;
+    const chatSince = Number(req.query.since ?? (room.chat?.at(-1)?.id ?? 0));
     const ready = () => {
       const v = playerView(rooms, room, seat.id);
-      return v.yourTurn || v.gameOver || (req.query.until === 'start' && v.started) ? v : null;
+      const newChat = req.query.chat && (room.chat?.at(-1)?.id ?? 0) > chatSince;
+      return v.yourTurn || v.gameOver || newChat || (req.query.until === 'start' && v.started) ? v : null;
     };
     const now = ready();
     if (now) return now;
@@ -251,11 +257,16 @@ export function createApi(rooms, { afterChange = () => {}, hub = new ApiHub() } 
     return { ok: true };
   }));
 
+  router.get('/chat', wrap((req) => {
+    const { room } = auth(req);
+    return { messages: rooms.chatSince(room, Number(req.query.since) || 0) };
+  }));
+
   router.post('/chat', wrap((req) => {
     const { room, seat } = auth(req);
-    const text = String(req.body?.text || '').trim().slice(0, 300);
-    if (text) hub.emit('chat', { room, from: seat, text });
-    return { ok: true };
+    const msg = rooms.say(room, seat.id, req.body?.text);
+    changed(room);
+    return { ok: true, message: msg };
   }));
 
   return { router, hub };

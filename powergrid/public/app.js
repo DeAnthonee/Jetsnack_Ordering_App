@@ -16,7 +16,6 @@
       hybridCoal: {},
       quoteCity: null,
     },
-    chat: [],
   };
 
   const RES = ['coal', 'oil', 'garbage', 'uranium'];
@@ -91,7 +90,6 @@
     emit('leave', {});
     clearSession();
     state.room = null;
-    state.chat = [];
     resetUi();
     show('home');
   }
@@ -108,12 +106,27 @@
     if (confirm('End the game for everyone and return to the lobby?')) emit('endGame', {});
   };
   $('#map-select').onchange = (e) => emit('settings', { mapId: e.target.value });
-  $('#chat-form').onsubmit = (e) => {
-    e.preventDefault();
-    const text = $('#chat-input').value.trim();
-    if (text) emit('chat', { text });
-    $('#chat-input').value = '';
-  };
+  for (const [form, input] of [['#chat-form', '#chat-input'], ['#lobby-chat-form', '#lobby-chat-input']]) {
+    $(form).onsubmit = (e) => {
+      e.preventDefault();
+      const text = $(input).value.trim();
+      if (text) emit('chat', { text });
+      $(input).value = '';
+    };
+  }
+
+  function renderChat(el) {
+    const msgs = state.room?.chat || [];
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    const seats = Object.fromEntries((state.room?.players || []).map((p) => [p.id, p]));
+    el.innerHTML = msgs.length ? msgs.map((m) => {
+      const t = new Date(m.at);
+      const hh = String(t.getHours()).padStart(2, '0'); const mm = String(t.getMinutes()).padStart(2, '0');
+      return `<div class="msg"><b style="color:${colorOf(m.playerId) || 'var(--accent-2)'}">${seats[m.playerId]?.bot ? '🤖 ' : ''}${esc(m.from)}:</b>${esc(m.text)}<time>${hh}:${mm}</time></div>`;
+    }).join('') : '<div class="empty">No messages yet.</div>';
+    if (atBottom || !el.dataset.scrolled) el.scrollTop = el.scrollHeight;
+    el.dataset.scrolled = '1';
+  }
 
   for (const b of document.querySelectorAll('.help-btn')) b.onclick = () => $('#help').showModal();
   $('#help-close').onclick = () => $('#help').close();
@@ -127,17 +140,11 @@
 
   socket.on('error-message', toast);
 
-  socket.on('chat', (msg) => {
-    state.chat.push(msg);
-    if (state.chat.length > 60) state.chat.shift();
-    renderLog();
-  });
-
   socket.on('room', (room) => {
     const wasInGame = !!state.room?.game;
     state.room = room;
     if (!room.game) {
-      if (wasInGame) { resetUi(); state.chat = []; toast('The host ended the game. Back in the lobby.'); }
+      if (wasInGame) { resetUi(); toast('The host ended the game. Back in the lobby.'); }
       renderLobby();
     } else renderGame();
   });
@@ -164,6 +171,7 @@
     sel.value = room.mapId;
     sel.disabled = !host;
     $('#start').disabled = !host || room.players.length < 2;
+    renderChat($('#lobby-chat'));
     $('#lobby-hint').textContent = room.players.length < 2
       ? 'Waiting for at least one more player…'
       : room.players.length === 2 ? '2 players: you will play against the Trust.' : `${room.players.length} players ready.`;
@@ -196,6 +204,7 @@
     renderMarket();
     renderResMarket();
     renderPlayers();
+    renderChat($('#chat'));
     renderLog();
   }
 
@@ -382,12 +391,8 @@
   function renderLog() {
     const g = game();
     if (!g) return;
-    const entries = [
-      ...g.log.map((l) => ({ at: 0, html: `<span class="round">R${l.round}</span>${esc(l.msg)}` })),
-    ];
-    const chat = state.chat.map((c) => `<div class="chat"><b style="color:${colorOf(c.playerId)}">${esc(c.from)}:</b> ${esc(c.text)}</div>`);
     const el = $('#log');
-    el.innerHTML = entries.map((e) => `<div>${e.html}</div>`).join('') + chat.join('');
+    el.innerHTML = g.log.map((l) => `<div><span class="round">R${l.round}</span>${esc(l.msg)}</div>`).join('');
     el.scrollTop = el.scrollHeight;
   }
 

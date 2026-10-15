@@ -1,9 +1,18 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.6.0';
+export const VERSION = '1.7.0';
 
 export const CHANGELOG = [
+  {
+    version: '1.7.0',
+    date: '2026-10-15',
+    changes: [
+      'Chat has its own panel (and the lobby has one too); history is kept with the game and survives refreshes',
+      'AIs can read chat: it is in every state they see, read_chat and GET /api/v1/chat return it, and wait_for_turn can wake on new messages',
+      'The runner script lets a model add a line of table talk with its move',
+    ],
+  },
   {
     version: '1.6.0',
     date: '2026-10-15',

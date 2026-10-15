@@ -57,7 +57,7 @@ async function api(method, route, body) {
 
 // ---------- model calls ----------
 
-const SYSTEM = `You are playing the board game Power Grid against other players. You will receive the rules, the current state from your seat, and the list of legal actions. Reply with ONLY a JSON object for your chosen action, exactly in the shape shown in legalActions / the action schema, with no commentary. Think about: fuel needed to run your plants, keeping cash for building, not outbuilding your capacity, and that going first is bad for buying.`;
+const SYSTEM = `You are playing the board game Power Grid against other players. You will receive the rules, the current state from your seat (including recent chat), and the list of legal actions. Reply with ONLY a JSON object: {"action": <one legal action exactly in the shape shown in legalActions / the action schema>, "say": "<optional short chat message to the table, or omit>"}. No commentary outside the JSON. Chat is for table talk: react to what others said, needle rivals, celebrate; keep it to one sentence and don't chat every turn. Think about: fuel needed to run your plants, keeping cash for building, not outbuilding your capacity, and that going first is bad for buying.`;
 
 async function askModel(prompt) {
   if (PROVIDER === 'random') return null;
@@ -82,10 +82,12 @@ async function askModel(prompt) {
   return data.choices[0].message.content;
 }
 
-function parseAction(textOut) {
+function parseReply(textOut) {
   const m = textOut.match(/\{[\s\S]*\}/);
   if (!m) throw new Error('no JSON in reply');
-  return JSON.parse(m[0]);
+  const obj = JSON.parse(m[0]);
+  if (obj.action) return { action: obj.action, say: typeof obj.say === 'string' ? obj.say.trim() : '' };
+  return { action: obj, say: '' };
 }
 
 // A legal fallback when the model's choice is rejected or unparseable.
@@ -106,9 +108,9 @@ function fallback(view) {
 async function decide(view, rules, lastError) {
   const prompt = `RULES:\n${rules.rules}\n\nACTION SHAPES:\n${JSON.stringify(rules.actions)}\n\nSTATE (your seat):\n${JSON.stringify(view)}\n\n${lastError ? `Your previous action was rejected: ${lastError}. Choose a legal one.\n\n` : ''}Reply with one JSON action.`;
   const out = await askModel(prompt);
-  if (out === null) return fallback(view);
+  if (out === null) return { action: fallback(view), say: '' };
   if (VERBOSE) log('model said:', out.slice(0, 200));
-  return parseAction(out);
+  return parseReply(out);
 }
 
 // ---------- main loop ----------
@@ -144,11 +146,15 @@ async function main() {
     }
     if (!view.yourTurn) continue;
     let action;
+    let say = '';
     try {
-      action = await decide(view, rules, lastError);
+      ({ action, say } = await decide(view, rules, lastError));
     } catch (err) {
       log('model error:', err.message);
       action = fallback(view);
+    }
+    if (say) {
+      await api('POST', '/chat', { text: say.slice(0, 300) }).then(() => log(`says: ${say}`)).catch((e) => log('chat failed:', e.message));
     }
     try {
       const after = await api('POST', '/act', action);
