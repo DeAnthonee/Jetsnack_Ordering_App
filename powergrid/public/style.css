@@ -200,3 +200,8 @@ label { display: block; margin: .5rem 0; }
 .chat-list .msg b { margin-right: .3rem; }
 .chat-list .msg time { color: var(--muted); font-size: .7rem; margin-left: .4rem; }
 .chat-list .empty { color: var(--muted); }
+
+/* Spectating */
+.small-note { font-size: .8rem; margin-top: -.25rem; }
+.eyes { font-size: .8rem; font-weight: 400; }
+.chat-list .msg.spectator b { font-style: italic; }

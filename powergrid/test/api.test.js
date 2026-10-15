@@ -198,3 +198,14 @@ test('chat is stored with the room and readable by AIs', async () => {
   assert.deepEqual(read.messages.map((m) => `${m.from}: ${m.text}`), ['Guest: yes, ready']);
   assert.equal(read.cursor, 3);
 });
+
+test('a program can watch a game without a seat', async () => {
+  const { data: { token, code } } = await call('POST', '/api/v1/lobbies', { body: { name: 'Host' } });
+  await call('POST', '/api/v1/bots', { token });
+  await call('POST', '/api/v1/start', { token });
+  const w = await call('GET', `/api/v1/lobbies/${code}/watch`);
+  assert.equal(w.status, 200);
+  assert.equal(w.data.game.phase, 'trustSetup');
+  assert.ok(!JSON.stringify(w.data).includes(token), 'no seat tokens in the spectator view');
+  assert.equal((await call('GET', '/api/v1/lobbies/NOPE1/watch')).status, 400);
+});

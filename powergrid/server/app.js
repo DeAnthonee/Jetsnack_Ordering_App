@@ -53,9 +53,20 @@ setInterval(() => rooms.sweep(), 10 * 60 * 1000).unref();
 // Every change to a room goes through here: browser clients get the new
 // state, and API/MCP callers blocked in wait_for_turn are woken.
 const hub = new ApiHub();
+// Spectators watch a room without a seat: socket ids per room code.
+const spectators = new Map();
+const watching = (code) => spectators.get(code)?.size || 0;
 const broadcast = (room) => {
-  io.to(room.code).emit('room', rooms.view(room));
+  io.to(room.code).emit('room', { ...rooms.view(room), spectators: watching(room.code) });
   hub.emit(room.code);
+};
+// Rooms can be dropped (last human left); tell anyone still watching.
+const origDelete = rooms.rooms.delete.bind(rooms.rooms);
+rooms.rooms.delete = (code) => {
+  const had = origDelete(code);
+  if (had) io.to(code).emit('room-closed');
+  spectators.delete(code);
+  return had;
 };
 
 // Bots act one step at a time with a short pause, so people can follow.
@@ -91,8 +102,19 @@ app.delete('/mcp', (_req, res) => res.status(405).end());
 io.on('connection', (socket) => {
   let room = null;
   let seat = null;
+  let spectating = null; // { code, name }
+
+  const stopSpectating = () => {
+    if (!spectating) return;
+    spectators.get(spectating.code)?.delete(socket.id);
+    socket.leave(spectating.code);
+    const r = rooms.rooms.get(spectating.code);
+    spectating = null;
+    if (r) broadcast(r);
+  };
 
   const attach = (r, s) => {
+    stopSpectating();
     if (room && room !== r) socket.leave(room.code);
     room = r;
     seat = s;
@@ -129,6 +151,20 @@ io.on('connection', (socket) => {
     const r = rooms.get(code);
     attach(r, rooms.join(code, name));
   }));
+
+  socket.on('spectate', handle(({ code, name }) => {
+    const r = rooms.get(code);
+    if (room) { socket.leave(room.code); room = null; seat = null; }
+    stopSpectating();
+    spectating = { code: r.code, name: String(name || '').trim().slice(0, 20) || 'Spectator' };
+    if (!spectators.has(r.code)) spectators.set(r.code, new Set());
+    spectators.get(r.code).add(socket.id);
+    socket.join(r.code);
+    socket.emit('spectating', { code: r.code, name: spectating.name });
+    broadcast(r);
+  }));
+
+  socket.on('stopSpectate', handle(() => stopSpectating()));
 
   socket.on('rejoin', handle(({ code, token }) => {
     const found = rooms.rejoin(code, token);
@@ -185,12 +221,19 @@ io.on('connection', (socket) => {
   }));
 
   socket.on('chat', handle(({ text }) => {
+    if (spectating) {
+      const r = rooms.get(spectating.code);
+      rooms.saySpectator(r, spectating.name, text);
+      broadcast(r);
+      return;
+    }
     inRoom();
     rooms.say(room, seat.id, text);
     broadcast(room);
   }));
 
   socket.on('disconnect', () => {
+    stopSpectating();
     if (!room || !seat) return;
     const stillHere = [...(io.sockets.adapter.rooms.get(room.code) || [])].some(
       (sid) => io.sockets.sockets.get(sid)?.data.playerId === seat.id,

@@ -86,6 +86,20 @@ export class RoomManager {
     return msg;
   }
 
+  // Spectators can chat too; their messages carry no player id.
+  saySpectator(room, name, text) {
+    const clean = String(text || '').trim().slice(0, 300);
+    const who = String(name || '').trim().slice(0, 20) || 'Spectator';
+    if (!clean) throw new RoomError('Empty message');
+    room.chat ||= [];
+    room.chatSeq = (room.chatSeq || 0) + 1;
+    const msg = { id: room.chatSeq, from: who, playerId: null, spectator: true, text: clean, at: Date.now() };
+    room.chat.push(msg);
+    if (room.chat.length > CHAT_KEEP) room.chat.splice(0, room.chat.length - CHAT_KEEP);
+    this.changed();
+    return msg;
+  }
+
   chatSince(room, sinceId = 0) {
     return (room.chat || []).filter((m) => m.id > sinceId);
   }

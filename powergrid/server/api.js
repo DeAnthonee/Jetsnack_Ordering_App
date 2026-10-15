@@ -189,6 +189,12 @@ export function createApi(rooms, { afterChange = () => {}, hub = new ApiHub() } 
     return { code: room.code, playerId: seat.id, token: seat.token };
   }));
 
+  // Watch a game without a seat: the same view a spectator in the browser gets.
+  router.get('/lobbies/:code/watch', wrap((req) => {
+    const room = rooms.get(req.params.code);
+    return { ...rooms.view(room), game: room.game ? room.game.publicState() : null };
+  }));
+
   router.get('/lobbies/:code', wrap((req) => {
     const room = rooms.get(req.params.code);
     return { code: room.code, started: !!room.game, mapId: room.mapId, players: room.players.map((p) => ({ name: p.name, bot: !!p.bot })) };
