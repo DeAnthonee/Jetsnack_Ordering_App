@@ -5,6 +5,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { Game, GameError } from './game/engine.js';
 import { MAPS, DEFAULT_MAP } from './game/map.js';
 import { Store } from './store.js';
+import { chooseAction, safeAction, BOT_NAMES } from './game/bot.js';
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const MAX_PLAYERS = 6;
@@ -65,6 +66,66 @@ export class RoomManager {
     return seat;
   }
 
+  // ---------- computer players ----------
+
+  addBot(room, playerId) {
+    if (room.hostId !== playerId) throw new RoomError('Only the host can add computer players');
+    if (room.game) throw new RoomError('The game has already started');
+    if (room.players.length >= MAX_PLAYERS) throw new RoomError('That lobby is full');
+    const used = new Set(room.players.map((p) => p.name.toLowerCase()));
+    const name = BOT_NAMES.find((n) => !used.has(n.toLowerCase())) || `Bot ${room.players.length + 1}`;
+    const seat = { id: randomUUID(), token: randomUUID(), name, connected: true, bot: true };
+    room.players.push(seat);
+    room.touched = Date.now();
+    this.changed();
+    return seat;
+  }
+
+  removeBot(room, playerId, botId) {
+    if (room.hostId !== playerId) throw new RoomError('Only the host can remove computer players');
+    if (room.game) throw new RoomError('The game has already started');
+    const seat = room.players.find((p) => p.id === botId && p.bot);
+    if (!seat) throw new RoomError('That is not a computer player');
+    room.players = room.players.filter((p) => p !== seat);
+    this.changed();
+  }
+
+  // The bot the game is waiting on, if any.
+  pendingBot(room) {
+    const g = room.game;
+    if (!g || g.phase === 'gameover') return null;
+    const bots = new Set(room.players.filter((p) => p.bot).map((p) => p.id));
+    return g.waitingOn().find((id) => bots.has(id)) || null;
+  }
+
+  // Let one bot take one action. Returns true if it did.
+  stepBot(room) {
+    const id = this.pendingBot(room);
+    if (!id) return false;
+    const g = room.game;
+    let action = chooseAction(g, id);
+    try {
+      g.apply(id, action);
+    } catch (err) {
+      if (!(err instanceof GameError)) throw err;
+      g.apply(id, safeAction(g, id));
+    }
+    room.touched = Date.now();
+    this.changed();
+    return true;
+  }
+
+  // Run bots until a human is up (used by tests and by the server loop).
+  runBots(room, limit = 1000) {
+    let n = 0;
+    while (n < limit && this.stepBot(room)) n++;
+    return n;
+  }
+
+  humansLeft(room) {
+    return room.players.filter((p) => !p.bot && !p.quit).length;
+  }
+
   rejoin(code, token) {
     const room = this.get(code);
     const seat = room.players.find((p) => p.token === token);
@@ -82,14 +143,14 @@ export class RoomManager {
     } else {
       room.players = room.players.filter((p) => p.id !== playerId);
     }
-    if (!room.players.length) {
+    if (!room.players.length || !this.humansLeft(room)) {
       this.rooms.delete(room.code);
       this.changed();
       return;
     }
     if (room.hostId === playerId) {
-      const next = room.players.find((p) => !p.quit && p.connected) || room.players.find((p) => !p.quit) || room.players[0];
-      room.hostId = next.id;
+      const humans = room.players.filter((p) => !p.bot && !p.quit);
+      room.hostId = (humans.find((p) => p.connected) || humans[0]).id;
     }
     this.changed();
   }
@@ -135,7 +196,7 @@ export class RoomManager {
       code: room.code,
       hostId: room.hostId,
       mapId: room.mapId,
-      players: room.players.map(({ id, name, connected, quit }) => ({ id, name, connected, quit: !!quit })),
+      players: room.players.map(({ id, name, connected, quit, bot }) => ({ id, name, connected, quit: !!quit, bot: !!bot })),
       game: room.game ? room.game.publicState() : null,
     };
   }
@@ -143,7 +204,7 @@ export class RoomManager {
   sweep() {
     const now = Date.now();
     for (const [code, room] of this.rooms) {
-      const anyone = room.players.some((p) => p.connected);
+      const anyone = room.players.some((p) => p.connected && !p.bot);
       if (!anyone && now - room.touched > IDLE_ROOM_MS) {
         this.rooms.delete(code);
         this.changed();

@@ -86,6 +86,7 @@
   $('#join').onclick = () => emit('join', { name: $('#name').value, code: $('#code').value.toUpperCase() });
   $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
   $('#start').onclick = () => emit('start', {});
+  $('#add-bot').onclick = () => emit('addBot', {});
   function goHome() {
     emit('leave', {});
     clearSession();
@@ -149,18 +150,24 @@
     const room = state.room;
     show('lobby');
     $('#lobby-code').textContent = room.code;
+    const host = room.hostId === state.me;
     $('#lobby-players').innerHTML = room.players.map((p) => `
-      <li><span class="${p.quit ? 'quit' : ''}">${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
-      <span class="${p.connected ? 'muted' : 'offline'}">${p.connected ? 'online' : 'offline'}</span></li>`).join('');
+      <li><span class="${p.quit ? 'quit' : ''}">${p.bot ? '🤖 ' : ''}${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
+      ${p.bot
+        ? (host ? `<button class="small remove-bot" data-id="${p.id}" type="button" title="Remove">✕</button>` : '<span class="muted">computer</span>')
+        : `<span class="${p.connected ? 'muted' : 'offline'}">${p.connected ? 'online' : 'offline'}</span>`}</li>`).join('');
+    $('#lobby-players').querySelectorAll('.remove-bot').forEach((b) => { b.onclick = () => emit('removeBot', { id: b.dataset.id }); });
+    $('#add-bot').hidden = !host;
+    $('#add-bot').disabled = room.players.length >= 6;
     const sel = $('#map-select');
     sel.innerHTML = Object.values(state.data.maps).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
     sel.value = room.mapId;
-    const host = room.hostId === state.me;
     sel.disabled = !host;
     $('#start').disabled = !host || room.players.length < 2;
     $('#lobby-hint').textContent = room.players.length < 2
       ? 'Waiting for at least one more player…'
       : room.players.length === 2 ? '2 players: you will play against the Trust.' : `${room.players.length} players ready.`;
+    if (room.players.length < 2) $('#lobby-hint').textContent += ' Or add a computer player.';
   }
 
   // ---------- game rendering ----------
@@ -361,7 +368,7 @@
       const res = RES.filter((r) => p.res[r]).map((r) => `${p.res[r]}${RES_ICON[r]}`).join(' ');
       const plants = p.plants.map((pl) => plantCard(pl, 'owned', '').replace('<div class="plant', `<div style="--owner:${p.color}" class="plant`)).join('');
       return `<div class="player ${active ? 'active' : ''} ${isMe ? 'me' : ''}" style="border-color:${p.color}">
-        <div class="head"><b class="${p.quit ? 'quit' : ''}"><i class="dot" style="background:${p.color}"></i>${esc(p.name)}</b>
+        <div class="head"><b class="${p.quit ? 'quit' : ''}"><i class="dot" style="background:${p.color}"></i>${seats[p.id]?.bot ? '🤖 ' : ''}${esc(p.name)}</b>
           ${isMe ? '<span class="badge">YOU</span>' : ''}${p.quit ? ' <span class="muted">left</span>' : ''}
           ${isTrust ? `<span class="muted">${p.housesLeft} houses left</span>` : `<span>💰 ${p.money}</span>`}
           ${!isTrust && seats[p.id] && !seats[p.id].connected ? '<span class="offline">offline</span>' : ''}</div>

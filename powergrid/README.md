@@ -52,13 +52,18 @@ Railway reads `railway.json` and builds the Dockerfile.
 - The 2-player "Against the Trust" variant
 - Germany's nuclear phase-out rule (plant 39 stops uranium resupply)
 - In-game chat, log, and a "How to play" guide
+- Computer players: the host adds up to five from the lobby; they bid, buy fuel, build and power on their own (server/game/bot.js)
 - Leave a game at any time (the seat auto-passes so others can continue); the host can end a game and return everyone to the lobby
 - Games saved to disk and restored after a restart
 
 ## Layout
 
 ```
-server/index.js        Express + Socket.IO entry point
+server/index.js        entry point (listens)
+server/app.js          Express + Socket.IO + API + MCP wiring
+server/api.js          HTTP API for programs and AIs
+server/mcp.js          MCP server (Streamable HTTP)
+agents/play.mjs        runner that lets an LLM play a seat
 server/rooms.js        lobbies, seats, reconnect tokens
 server/store.js        saves lobbies to disk and restores them on start
 server/game/engine.js  the rules engine (all game state lives here)
@@ -67,6 +72,12 @@ server/game/map.js     the maps
 public/                the browser client (vanilla JS, no build step)
 test/                  engine tests, including bot-played full games
 ```
+
+## AIs and programs as players
+
+See `agents/README.md`: an HTTP API under `/api/v1`, an MCP endpoint at
+`/mcp` for Claude and ChatGPT connectors, and `agents/play.mjs`, which lets
+a model from Anthropic, OpenAI or xAI play a seat through its API.
 
 ## Versioning
 

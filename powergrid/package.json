@@ -1,6 +1,6 @@
 {
   "name": "power-grid-online",
-  "version": "1.4.1",
+  "version": "1.6.0",
   "private": true,
   "description": "Browser-based multiplayer version of the Power Grid board game (unofficial fan project)",
   "type": "module",
@@ -14,7 +14,9 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "express": "^5.2.1",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "zod": "^4.6.7"
   }
 }
