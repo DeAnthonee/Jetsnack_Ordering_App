@@ -1,9 +1,18 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.5.0';
+export const VERSION = '1.6.0';
 
 export const CHANGELOG = [
+  {
+    version: '1.6.0',
+    date: '2026-10-15',
+    changes: [
+      'HTTP API (/api/v1) so programs and AIs can join lobbies, read the game and act',
+      'MCP endpoint (/mcp) so Claude and ChatGPT can play through a connector',
+      'agents/play.mjs: lets a model from Anthropic, OpenAI or xAI play a seat via its API',
+    ],
+  },
   {
     version: '1.5.0',
     date: '2026-10-15',
