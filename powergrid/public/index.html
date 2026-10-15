@@ -38,6 +38,11 @@
         <select id="map-select"></select>
       </label>
       <p id="lobby-hint" class="muted"></p>
+      <div id="lobby-chat" class="chat-list small"></div>
+      <form id="lobby-chat-form" class="row">
+        <input id="lobby-chat-input" maxlength="300" placeholder="Say something…" autocomplete="off">
+        <button type="submit">Send</button>
+      </form>
       <div class="row">
         <button id="start" class="primary">Start game</button>
         <button id="leave">Leave</button>
@@ -78,12 +83,16 @@
           <div id="players"></div>
         </div>
         <div class="panel">
-          <h3>Log</h3>
-          <div id="log" class="log"></div>
+          <h3>Chat</h3>
+          <div id="chat" class="chat-list"></div>
           <form id="chat-form" class="row">
-            <input id="chat-input" maxlength="300" placeholder="Say something…">
+            <input id="chat-input" maxlength="300" placeholder="Say something…" autocomplete="off">
             <button type="submit">Send</button>
           </form>
+        </div>
+        <div class="panel">
+          <h3>Log</h3>
+          <div id="log" class="log"></div>
         </div>
       </aside>
     </div>

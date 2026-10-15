@@ -192,3 +192,11 @@ label { display: block; margin: .5rem 0; }
 #changelog-body h4 { display: flex; justify-content: space-between; }
 #changelog-body h4 span { color: var(--muted); font-weight: 400; font-size: .85rem; }
 #map-legend { bottom: 2.4rem; }
+
+/* Chat */
+.chat-list { max-height: 200px; overflow-y: auto; font-size: .85rem; margin-bottom: .3rem; }
+.chat-list.small { max-height: 120px; background: var(--bg); border-radius: 8px; padding: .3rem .5rem; margin: .5rem 0 .2rem; }
+.chat-list .msg { padding: .15rem 0; border-bottom: 1px dotted var(--border); word-break: break-word; }
+.chat-list .msg b { margin-right: .3rem; }
+.chat-list .msg time { color: var(--muted); font-size: .7rem; margin-left: .4rem; }
+.chat-list .empty { color: var(--muted); }

@@ -78,7 +78,7 @@ export function createMcp(rooms, { afterChange = () => {}, hub }) {
     }));
 
     server.registerTool('get_state', {
-      description: 'The game from your seat: phase, your money/plants/fuel/cities, the market, every player, the playing zone, recent log, and legalActions (what you may do right now).',
+      description: 'The game from your seat: phase, your money/plants/fuel/cities, the market, every player, the playing zone, recent log, recent chat, and legalActions (what you may do right now).',
       inputSchema: { token: z.string() },
     }, guard(({ token }) => {
       const { room, seat } = findSeat(token);
@@ -86,11 +86,16 @@ export function createMcp(rooms, { afterChange = () => {}, hub }) {
     }));
 
     server.registerTool('wait_for_turn', {
-      description: 'Block until it is your turn (or the game ends), up to `seconds` (max 50). Returns the same as get_state. Call this in a loop while playing.',
-      inputSchema: { token: z.string(), seconds: z.number().int().min(1).max(50).optional() },
-    }, guard(({ token, seconds = 25 }) => {
+      description: 'Block until it is your turn (or the game ends), up to `seconds` (max 50). With alsoOnChat=true it also returns when someone sends a chat message, so you can reply. Returns the same as get_state. Call this in a loop while playing.',
+      inputSchema: { token: z.string(), seconds: z.number().int().min(1).max(50).optional(), alsoOnChat: z.boolean().optional() },
+    }, guard(({ token, seconds = 25, alsoOnChat = false }) => {
       const { room, seat } = findSeat(token);
-      const ready = () => { const v = playerView(rooms, room, seat.id); return v.yourTurn || v.gameOver ? v : null; };
+      const chatSince = room.chat?.at(-1)?.id ?? 0;
+      const ready = () => {
+        const v = playerView(rooms, room, seat.id);
+        const newChat = alsoOnChat && (room.chat?.at(-1)?.id ?? 0) > chatSince;
+        return v.yourTurn || v.gameOver || newChat ? v : null;
+      };
       const now = ready();
       if (now) return now;
       return new Promise((resolve) => {
@@ -113,12 +118,22 @@ export function createMcp(rooms, { afterChange = () => {}, hub }) {
     }));
 
     server.registerTool('say', {
-      description: 'Send a short chat message to the other players.',
+      description: 'Send a short chat message to everyone in the game (humans see it in the browser; other AIs see it via read_chat / get_state). Use it for table talk: react to bids, taunt, congratulate, negotiate.',
       inputSchema: { token: z.string(), text: z.string().max(300) },
     }, guard(({ token, text: msg }) => {
       const { room, seat } = findSeat(token);
-      hub.emit('chat', { room, from: seat, text: msg });
-      return { ok: true };
+      const message = rooms.say(room, seat.id, msg);
+      changed(room);
+      return { ok: true, message };
+    }));
+
+    server.registerTool('read_chat', {
+      description: 'Read chat messages. Pass `since` (the id of the last message you saw) to get only newer ones; omit it for the recent history.',
+      inputSchema: { token: z.string(), since: z.number().int().optional() },
+    }, guard(({ token, since }) => {
+      const { room } = findSeat(token);
+      const messages = since ? rooms.chatSince(room, since) : (room.chat || []).slice(-30);
+      return { messages, cursor: room.chat?.at(-1)?.id ?? 0 };
     }));
 
     return server;

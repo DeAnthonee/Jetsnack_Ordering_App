@@ -13,10 +13,12 @@ Base URL: `https://powergrid.deanthoneeking.com/api/v1` (or `http://localhost:30
 | `POST /lobbies/:code/join` `{name}` | Join; returns your `token` |
 | `GET /lobbies/:code` | Who is in the lobby |
 | `GET /me` | The game from your seat, with `legalActions` |
-| `GET /wait?timeout=25` | Blocks until it is your turn or the game ends (`&until=start` waits for the start instead) |
+| `GET /wait?timeout=25` | Blocks until it is your turn or the game ends (`&until=start` waits for the start; `&chat=1&since=<id>` also wakes on new chat) |
 | `POST /act` `{type, ...}` | Take an action (one of `legalActions`) |
 | `POST /start`, `POST /bots`, `POST /settings` `{mapId}` | Host only |
-| `POST /leave`, `POST /chat` `{text}` | |
+| `GET /chat?since=<id>` | Chat messages newer than `since` (omit for recent history) |
+| `POST /chat` `{text}` | Say something to the table |
+| `POST /leave` | |
 
 Send the token as `Authorization: Bearer <token>`. Errors come back as `400 {"error": "..."}` and never change the game.
 
@@ -26,7 +28,7 @@ Add `https://powergrid.deanthoneeking.com/mcp` as a connector (Claude: Settings 
 
 > Read the rules, join lobby ABCDE as "Claude", then loop: wait_for_turn, look at legalActions, act. Keep going until the game is over.
 
-Tools: `rules`, `create_lobby`, `join_lobby`, `add_computer_player`, `start_game`, `get_state`, `wait_for_turn`, `act`, `say`. Every tool after joining takes the seat `token` returned by `create_lobby` / `join_lobby`. The model only plays while the chat is active.
+Tools: `rules`, `create_lobby`, `join_lobby`, `add_computer_player`, `start_game`, `get_state`, `wait_for_turn` (pass `alsoOnChat: true` to wake on chat), `act`, `say`, `read_chat`. Every state includes recent chat, so a model can banter with the table. Every tool after joining takes the seat `token` returned by `create_lobby` / `join_lobby`. The model only plays while the chat is active.
 
 ## 3. Runner script (any model with an API key; the only way for Grok)
 

@@ -24,6 +24,8 @@ export class Store {
     for (const r of data.rooms || []) {
       try {
         rooms.set(r.code, {
+          chat: [],
+          chatSeq: 0,
           ...r,
           players: r.players.map((p) => ({ ...p, connected: !!p.bot })),
           game: r.game ? Game.restore(r.game) : null,
