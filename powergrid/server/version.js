@@ -1,9 +1,16 @@
 // Bump VERSION and add a changelog entry with every change that ships.
 // The client shows VERSION bottom-left; clicking it opens the changelog.
 
-export const VERSION = '1.7.0';
+export const VERSION = '1.8.0';
 
 export const CHANGELOG = [
+  {
+    version: '1.8.0',
+    date: '2026-10-15',
+    changes: [
+      'Spectate mode: enter a lobby code and press Watch to follow a game without taking a seat; spectators can chat and players see how many are watching',
+    ],
+  },
   {
     version: '1.7.0',
     date: '2026-10-15',

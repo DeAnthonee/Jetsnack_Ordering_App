@@ -7,6 +7,7 @@
     me: null,        // my player id
     token: null,
     code: null,
+    spectating: null, // name when watching without a seat
     room: null,      // latest room view from the server
     data: null,      // static data (maps, prices)
     ui: {            // local, per-phase scratch state
@@ -44,7 +45,7 @@
   const playerById = (id) => (id === 'trust' ? game()?.trust : game()?.players.find((p) => p.id === id));
   const nameOf = (id) => playerById(id)?.name ?? '?';
   const colorOf = (id) => playerById(id)?.color ?? '#888';
-  const isMyTurn = () => game()?.waitingOn.includes(state.me);
+  const isMyTurn = () => !state.spectating && game()?.waitingOn.includes(state.me);
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function resourceCost(type, available, qty) {
@@ -72,7 +73,7 @@
   }
 
   function saveSession() {
-    try { localStorage.setItem('pg-session', JSON.stringify({ code: state.code, token: state.token })); } catch {}
+    try { localStorage.setItem('pg-session', JSON.stringify({ code: state.code, token: state.token, spectating: state.spectating })); } catch {}
   }
 
   function clearSession() {
@@ -83,11 +84,17 @@
 
   $('#create').onclick = () => emit('create', { name: $('#name').value });
   $('#join').onclick = () => emit('join', { name: $('#name').value, code: $('#code').value.toUpperCase() });
+  $('#watch').onclick = () => emit('spectate', { name: $('#name').value, code: $('#code').value.toUpperCase() });
   $('#code').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#join').click(); });
   $('#start').onclick = () => emit('start', {});
   $('#add-bot').onclick = () => emit('addBot', {});
   function goHome() {
-    emit('leave', {});
+    if (state.spectating) emit('stopSpectate', {});
+    else emit('leave', {});
+    state.spectating = null;
+    state.me = null;
+    state.token = null;
+    state.code = null;
     clearSession();
     state.room = null;
     resetUi();
@@ -97,6 +104,8 @@
     state.ui = { bid: null, order: { coal: 0, oil: 0, garbage: 0, uranium: 0 }, fire: new Set(), hybridCoal: {}, quoteCity: null };
   }
   $('#leave').onclick = goHome;
+  $('#stop-watching').onclick = goHome;
+  $('#lobby-stop-watching').onclick = goHome;
   $('#leave-game').onclick = () => {
     const g = game();
     const msg = g?.phase === 'gameover' ? 'Leave this lobby?' : 'Leave this game? The others can keep playing; your seat will pass every turn.';
@@ -122,7 +131,8 @@
     el.innerHTML = msgs.length ? msgs.map((m) => {
       const t = new Date(m.at);
       const hh = String(t.getHours()).padStart(2, '0'); const mm = String(t.getMinutes()).padStart(2, '0');
-      return `<div class="msg"><b style="color:${colorOf(m.playerId) || 'var(--accent-2)'}">${seats[m.playerId]?.bot ? '🤖 ' : ''}${esc(m.from)}:</b>${esc(m.text)}<time>${hh}:${mm}</time></div>`;
+      const color = m.playerId ? colorOf(m.playerId) : 'var(--muted)';
+      return `<div class="msg ${m.spectator ? 'spectator' : ''}"><b style="color:${color}">${m.spectator ? '👁 ' : seats[m.playerId]?.bot ? '🤖 ' : ''}${esc(m.from)}:</b>${esc(m.text)}<time>${hh}:${mm}</time></div>`;
     }).join('') : '<div class="empty">No messages yet.</div>';
     if (atBottom || !el.dataset.scrolled) el.scrollTop = el.scrollHeight;
     el.dataset.scrolled = '1';
@@ -135,7 +145,24 @@
     state.code = code;
     state.me = playerId;
     state.token = token;
+    state.spectating = null;
     saveSession();
+  });
+
+  socket.on('spectating', ({ code, name }) => {
+    state.code = code;
+    state.me = null;
+    state.token = null;
+    state.spectating = name;
+    saveSession();
+  });
+
+  socket.on('room-closed', () => {
+    if (!state.spectating) return;
+    toast('That game has closed.');
+    state.spectating = null; state.code = null; state.room = null;
+    clearSession();
+    show('home');
   });
 
   socket.on('error-message', toast);
@@ -151,13 +178,21 @@
 
   socket.on('connect', () => {
     if (state.code && state.token) emit('rejoin', { code: state.code, token: state.token });
+    else if (state.code && state.spectating) emit('spectate', { code: state.code, name: state.spectating });
   });
+
+  const eyes = (n) => (n ? `👁 ${n} watching` : '');
 
   function renderLobby() {
     const room = state.room;
     show('lobby');
     $('#lobby-code').textContent = room.code;
-    const host = room.hostId === state.me;
+    const host = !state.spectating && room.hostId === state.me;
+    $('#lobby-eyes').textContent = eyes(room.spectators);
+    $('#lobby-blurb').textContent = state.spectating ? 'You are watching. The game will appear here when the host starts it.' : 'Share this code. The game starts when the host presses Start.';
+    $('#start').hidden = !!state.spectating;
+    $('#leave').hidden = !!state.spectating;
+    $('#lobby-stop-watching').hidden = !state.spectating;
     $('#lobby-players').innerHTML = room.players.map((p) => `
       <li><span class="${p.quit ? 'quit' : ''}">${p.bot ? '🤖 ' : ''}${esc(p.name)}${p.id === room.hostId ? ' <span class="muted">(host)</span>' : ''}${p.id === state.me ? ' <span class="muted">(you)</span>' : ''}</span>
       ${p.bot
@@ -165,6 +200,7 @@
         : `<span class="${p.connected ? 'muted' : 'offline'}">${p.connected ? 'online' : 'offline'}</span>`}</li>`).join('');
     $('#lobby-players').querySelectorAll('.remove-bot').forEach((b) => { b.onclick = () => emit('removeBot', { id: b.dataset.id }); });
     $('#add-bot').hidden = !host;
+    $('#map-select').closest('label').hidden = !!state.spectating;
     $('#add-bot').disabled = room.players.length >= 6;
     const sel = $('#map-select');
     sel.innerHTML = Object.values(state.data.maps).map((m) => `<option value="${m.id}">${esc(m.name)}</option>`).join('');
@@ -197,7 +233,10 @@
       waiting.textContent = isMyTurn() ? 'Your move' : `Waiting for ${names.join(', ')}`;
     }
     waiting.classList.toggle('me', !!isMyTurn());
-    $('#end-game').hidden = state.room.hostId !== state.me;
+    $('#end-game').hidden = !!state.spectating || state.room.hostId !== state.me;
+    $('#leave-game').hidden = !!state.spectating;
+    $('#stop-watching').hidden = !state.spectating;
+    $('#game-eyes').textContent = eyes(state.room.spectators);
 
     renderMap();
     renderAction();
@@ -403,6 +442,10 @@
     const el = $('#action');
     const me = myPlayer();
     if (g.phase === 'gameover') return renderGameOver(el);
+    if (state.spectating) {
+      el.innerHTML = `<h3>Watching</h3><p class="muted">${g.waitingOn.map(nameOf).join(', ')} ${g.waitingOn.length > 1 ? 'are' : 'is'} up. You can chat but not play.</p>`;
+      return;
+    }
     if (!isMyTurn()) {
       el.innerHTML = `<h3>Waiting</h3><p class="muted">${g.waitingOn.map(nameOf).join(', ')} ${g.waitingOn.length > 1 ? 'are' : 'is'} taking a turn.</p>`;
       return;
@@ -599,7 +642,7 @@
     el.innerHTML = `<h3>Game over</h3><ol class="ranking">${g.ranking.map((id) => {
       const p = playerById(id);
       return `<li><b style="color:${p.color}">${esc(p.name)}</b> — powered ${p.lastPowered}, ${p.money} Elektro, ${p.cities.length} cities</li>`;
-    }).join('')}</ol><div class="row">${state.room.hostId === state.me ? '<button id="again" class="primary">Back to lobby (play again)</button>' : ''}<button id="back-home">Leave</button></div>`;
+    }).join('')}</ol><div class="row">${!state.spectating && state.room.hostId === state.me ? '<button id="again" class="primary">Back to lobby (play again)</button>' : ''}<button id="back-home">${state.spectating ? 'Stop watching' : 'Leave'}</button></div>`;
     $('#back-home').onclick = goHome;
     const again = $('#again');
     if (again) again.onclick = () => emit('endGame', {});
@@ -637,6 +680,10 @@
         state.code = saved.code;
         state.token = saved.token;
         socket.emit('rejoin', saved, (res) => { if (!res.ok) clearSession(); });
+      } else if (saved?.code && saved?.spectating) {
+        state.code = saved.code;
+        state.spectating = saved.spectating;
+        socket.emit('spectate', { code: saved.code, name: saved.spectating }, (res) => { if (!res.ok) { clearSession(); state.spectating = null; state.code = null; } });
       }
     } catch {}
   });

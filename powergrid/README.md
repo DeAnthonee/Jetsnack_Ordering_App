@@ -53,6 +53,7 @@ Railway reads `railway.json` and builds the Dockerfile.
 - Germany's nuclear phase-out rule (plant 39 stops uranium resupply)
 - In-game chat, log, and a "How to play" guide
 - Computer players: the host adds up to five from the lobby; they bid, buy fuel, build and power on their own (server/game/bot.js)
+- Spectate mode: enter a code and press Watch to follow a game without a seat; spectators can chat
 - Leave a game at any time (the seat auto-passes so others can continue); the host can end a game and return everyone to the lobby
 - Games saved to disk and restored after a restart
 

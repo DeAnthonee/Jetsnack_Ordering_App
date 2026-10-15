@@ -22,7 +22,9 @@
       <div class="row">
         <input id="code" maxlength="5" placeholder="LOBBY CODE" class="code-input">
         <button id="join">Join</button>
+        <button id="watch" type="button" title="Watch a game without playing">Watch</button>
       </div>
+      <p class="muted small-note">Join takes a seat; Watch lets you follow a game as a spectator.</p>
       <div class="row"><button class="help-btn" type="button">How to play</button></div>
     </div>
   </section>
@@ -30,8 +32,8 @@
   <!-- Lobby -->
   <section id="lobby" class="screen" hidden>
     <div class="card home-card">
-      <h2>Lobby <span id="lobby-code" class="code"></span></h2>
-      <p class="muted">Share this code. The game starts when the host presses Start.</p>
+      <h2>Lobby <span id="lobby-code" class="code"></span> <span id="lobby-eyes" class="muted eyes"></span></h2>
+      <p class="muted" id="lobby-blurb">Share this code. The game starts when the host presses Start.</p>
       <ul id="lobby-players" class="player-list"></ul>
       <div class="row"><button id="add-bot" class="small" type="button">+ Add computer player</button></div>
       <label>Map
@@ -46,6 +48,7 @@
       <div class="row">
         <button id="start" class="primary">Start game</button>
         <button id="leave">Leave</button>
+        <button id="lobby-stop-watching" type="button" hidden>Stop watching</button>
       </div>
     </div>
   </section>
@@ -57,8 +60,10 @@
       <div class="row" style="margin:0">
         <div id="status-waiting"></div>
         <button class="help-btn small" type="button">How to play</button>
+        <span id="game-eyes" class="muted eyes"></span>
         <button id="end-game" class="small danger" type="button" hidden>End game</button>
         <button id="leave-game" class="small" type="button">Leave game</button>
+        <button id="stop-watching" class="small" type="button" hidden>Stop watching</button>
       </div>
     </header>
 
